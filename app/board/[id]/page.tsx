@@ -24,13 +24,7 @@ import {
   createMember,
   deleteMember,
 } from "@/lib/db";
-import type { List, Card, Member, CardStatus } from "@/lib/types";
-
-const STATUSES: { key: CardStatus; label: string; color: string }[] = [
-  { key: "todo", label: "À faire", color: "#64748b" },
-  { key: "in_progress", label: "En cours", color: "#f59e0b" },
-  { key: "done", label: "Terminé", color: "#22c55e" },
-];
+import type { List, Card, Member } from "@/lib/types";
 
 const LABEL_COLORS = [
   "#ef4444",
@@ -228,6 +222,21 @@ export default function BoardPage() {
     await deleteList(id);
   }
 
+  // Déplacer une carte vers une colonne en cliquant (= changer son statut)
+  async function moveCardToList(card: Card, listId: string) {
+    if (card.list_id === listId) return;
+    const pos = cardsByList[listId]?.length ?? 0;
+    setCards((prev) =>
+      prev.map((c) =>
+        c.id === card.id ? { ...c, list_id: listId, position: pos } : c
+      )
+    );
+    setEditing((cur) =>
+      cur && cur.id === card.id ? { ...cur, list_id: listId, position: pos } : cur
+    );
+    await updateCard(card.id, { list_id: listId, position: pos });
+  }
+
   if (loading) {
     return (
       <main className="min-h-dvh bg-slate-800 p-4 text-slate-200">Chargement…</main>
@@ -323,27 +332,8 @@ export default function BoardPage() {
                                           </span>
                                         )}
                                       </div>
-                                      {(card.status !== "none" ||
-                                        card.assignee_ids.length > 0) && (
-                                        <div className="mt-2 flex items-center justify-between gap-2">
-                                          {(() => {
-                                            const st = STATUSES.find(
-                                              (s) => s.key === card.status
-                                            );
-                                            return st ? (
-                                              <span
-                                                style={{
-                                                  background: st.color + "22",
-                                                  color: st.color,
-                                                }}
-                                                className="rounded px-1.5 py-0.5 text-[11px] font-medium"
-                                              >
-                                                {st.label}
-                                              </span>
-                                            ) : (
-                                              <span />
-                                            );
-                                          })()}
+                                      {card.assignee_ids.length > 0 && (
+                                        <div className="mt-2 flex justify-end">
                                           <div className="flex -space-x-2">
                                             {card.assignee_ids
                                               .map((id) => membersById[id])
@@ -384,8 +374,10 @@ export default function BoardPage() {
       {editing && (
         <CardModal
           card={editing}
+          lists={lists}
           members={members}
           onAddMember={addMember}
+          onMove={(listId) => moveCardToList(editing, listId)}
           onClose={() => setEditing(null)}
           onChange={(fields) => {
             setCards((prev) =>
@@ -573,15 +565,19 @@ function AddList({ onAdd }: { onAdd: (name: string) => void }) {
 
 function CardModal({
   card,
+  lists,
   members,
   onAddMember,
+  onMove,
   onClose,
   onChange,
   onDelete,
 }: {
   card: Card;
+  lists: List[];
   members: Member[];
   onAddMember: (name: string) => Promise<Member>;
+  onMove: (listId: string) => void;
   onClose: () => void;
   onChange: (fields: Partial<Card>) => void;
   onDelete: () => void;
@@ -621,35 +617,27 @@ function CardModal({
           className="w-full rounded-lg border border-slate-300 p-2 font-medium text-slate-800 outline-none focus:ring-2 focus:ring-sky-400"
         />
 
-        {/* Statut */}
+        {/* Déplacer vers une colonne (= changer le statut) */}
         <p className="mt-4 mb-1 text-xs font-semibold uppercase text-slate-400">
-          Statut
+          Colonne / statut
         </p>
         <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => onChange({ status: "none" })}
-            className={`rounded-full border px-3 py-1 text-sm ${
-              card.status === "none"
-                ? "border-slate-400 bg-slate-100"
-                : "border-slate-200"
-            }`}
-          >
-            Aucun
-          </button>
-          {STATUSES.map((s) => (
-            <button
-              key={s.key}
-              onClick={() => onChange({ status: s.key })}
-              style={
-                card.status === s.key
-                  ? { background: s.color, color: "white", borderColor: s.color }
-                  : { color: s.color, borderColor: s.color }
-              }
-              className="rounded-full border px-3 py-1 text-sm font-medium"
-            >
-              {s.label}
-            </button>
-          ))}
+          {lists.map((l) => {
+            const current = card.list_id === l.id;
+            return (
+              <button
+                key={l.id}
+                onClick={() => onMove(l.id)}
+                className={`rounded-full border px-3 py-1 text-sm font-medium ${
+                  current
+                    ? "border-sky-600 bg-sky-600 text-white"
+                    : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {l.name}
+              </button>
+            );
+          })}
         </div>
 
         {/* Couleur */}
@@ -719,15 +707,15 @@ function CardModal({
           </button>
         </div>
 
-        {/* Description */}
+        {/* Notes */}
         <p className="mt-4 mb-1 text-xs font-semibold uppercase text-slate-400">
-          Description
+          📝 Notes
         </p>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           onBlur={() => onChange({ description })}
-          placeholder="Détails…"
+          placeholder="Ajoute des notes, détails, liens…"
           rows={4}
           className="w-full resize-none rounded-lg border border-slate-300 p-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-sky-400"
         />

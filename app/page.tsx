@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { fetchBoards, createBoard, deleteBoard } from "@/lib/db";
+import { fetchBoards, createBoardWithDefaults, deleteBoard } from "@/lib/db";
 import { supabase } from "@/lib/supabase";
 import type { Board } from "@/lib/types";
 
@@ -41,7 +41,7 @@ export default function HomePage() {
     const n = name.trim();
     if (!n) return;
     setName("");
-    const b = await createBoard(n);
+    const b = await createBoardWithDefaults(n);
     setBoards((prev) => [...prev, b]);
   }
 

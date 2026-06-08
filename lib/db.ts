@@ -21,6 +21,17 @@ export async function createBoard(name: string): Promise<Board> {
   return data;
 }
 
+// Crée un tableau avec ses 3 colonnes par défaut (À faire / En cours / Terminé).
+export const DEFAULT_COLUMNS = ["À faire", "En cours", "Terminé"];
+
+export async function createBoardWithDefaults(name: string): Promise<Board> {
+  const board = await createBoard(name);
+  await Promise.all(
+    DEFAULT_COLUMNS.map((n, i) => createList(board.id, n, i))
+  );
+  return board;
+}
+
 export async function renameBoard(id: string, name: string) {
   const { error } = await supabase.from("boards").update({ name }).eq("id", id);
   if (error) throw error;
