@@ -1,5 +1,4 @@
--- TeamBoard — schéma Supabase
--- À coller dans Supabase > SQL Editor > Run
+-- TeamBoard — schéma Supabase (idempotent, ré-exécutable)
 
 create extension if not exists "pgcrypto";
 
@@ -29,15 +28,25 @@ create table if not exists cards (
 create index if not exists lists_board_idx on lists(board_id);
 create index if not exists cards_list_idx on cards(list_id);
 
--- Realtime
-alter publication supabase_realtime add table boards;
-alter publication supabase_realtime add table lists;
-alter publication supabase_realtime add table cards;
+-- Realtime (ignore si déjà ajouté)
+do $$ begin
+  alter publication supabase_realtime add table boards;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter publication supabase_realtime add table lists;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter publication supabase_realtime add table cards;
+exception when duplicate_object then null; end $$;
 
 -- RLS : accès via la clé anon (l'app est protégée par un mot de passe d'équipe).
 alter table boards enable row level security;
 alter table lists  enable row level security;
 alter table cards  enable row level security;
+
+drop policy if exists "anon_all_boards" on boards;
+drop policy if exists "anon_all_lists"  on lists;
+drop policy if exists "anon_all_cards"  on cards;
 
 create policy "anon_all_boards" on boards for all using (true) with check (true);
 create policy "anon_all_lists"  on lists  for all using (true) with check (true);
