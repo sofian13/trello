@@ -76,6 +76,7 @@ export default function BoardPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Card | null>(null);
+  const [editingNew, setEditingNew] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
 
   async function load() {
@@ -209,10 +210,23 @@ export default function BoardPage() {
     setLists((prev) => [...prev, l]);
   }
 
-  async function addCard(listId: string, title: string) {
-    const pos = (cardsByList[listId]?.length ?? 0);
-    const c = await createCard(listId, title, pos);
+  // Crée une carte et ouvre directement l'éditeur complet (focus sur le titre).
+  async function addCardAndOpen(listId: string) {
+    const pos = cardsByList[listId]?.length ?? 0;
+    const c = await createCard(listId, "Nouvelle tâche", pos);
     setCards((prev) => [...prev, c]);
+    setEditingNew(true);
+    setEditing(c);
+  }
+
+  function openCard(card: Card) {
+    setEditingNew(false);
+    setEditing(card);
+  }
+
+  function closeCard() {
+    setEditing(null);
+    setEditingNew(false);
   }
 
   async function removeList(id: string) {
@@ -314,7 +328,7 @@ export default function BoardPage() {
                                     ref={cp.innerRef}
                                     {...cp.draggableProps}
                                     {...cp.dragHandleProps}
-                                    onClick={() => setEditing(card)}
+                                    onClick={() => openCard(card)}
                                     className="cursor-pointer overflow-hidden rounded-lg bg-white text-sm text-slate-800 shadow-sm hover:bg-slate-50"
                                   >
                                     {card.color && (
@@ -359,7 +373,7 @@ export default function BoardPage() {
                         )}
                       </Droppable>
 
-                      <AddCard onAdd={(t) => addCard(list.id, t)} />
+                      <AddCard onAdd={() => addCardAndOpen(list.id)} />
                     </div>
                   )}
                 </Draggable>
@@ -374,11 +388,12 @@ export default function BoardPage() {
       {editing && (
         <CardModal
           card={editing}
+          isNew={editingNew}
           lists={lists}
           members={members}
           onAddMember={addMember}
           onMove={(listId) => moveCardToList(editing, listId)}
-          onClose={() => setEditing(null)}
+          onClose={closeCard}
           onChange={(fields) => {
             setCards((prev) =>
               prev.map((c) => (c.id === editing.id ? { ...c, ...fields } : c))
@@ -389,7 +404,7 @@ export default function BoardPage() {
           onDelete={() => {
             setCards((prev) => prev.filter((c) => c.id !== editing.id));
             deleteCard(editing.id);
-            setEditing(null);
+            closeCard();
           }}
         />
       )}
@@ -459,57 +474,14 @@ function ListHeader({
   );
 }
 
-function AddCard({ onAdd }: { onAdd: (title: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-
-  if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className="m-2 rounded-lg px-2 py-1 text-left text-sm text-slate-500 hover:bg-slate-200"
-      >
-        + Ajouter une carte
-      </button>
-    );
-  }
+function AddCard({ onAdd }: { onAdd: () => void }) {
   return (
-    <div className="p-2">
-      <textarea
-        autoFocus
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            if (title.trim()) onAdd(title.trim());
-            setTitle("");
-            setOpen(false);
-          }
-          if (e.key === "Escape") setOpen(false);
-        }}
-        placeholder="Titre de la carte…"
-        className="w-full resize-none rounded-lg border border-slate-300 p-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-sky-400"
-      />
-      <div className="mt-1 flex gap-2">
-        <button
-          onClick={() => {
-            if (title.trim()) onAdd(title.trim());
-            setTitle("");
-            setOpen(false);
-          }}
-          className="rounded bg-sky-600 px-3 py-1 text-sm text-white hover:bg-sky-700"
-        >
-          Ajouter
-        </button>
-        <button
-          onClick={() => setOpen(false)}
-          className="text-sm text-slate-500"
-        >
-          Annuler
-        </button>
-      </div>
-    </div>
+    <button
+      onClick={onAdd}
+      className="m-2 rounded-lg px-2 py-1 text-left text-sm font-medium text-slate-500 hover:bg-slate-200"
+    >
+      + Ajouter une carte
+    </button>
   );
 }
 
@@ -565,6 +537,7 @@ function AddList({ onAdd }: { onAdd: (name: string) => void }) {
 
 function CardModal({
   card,
+  isNew,
   lists,
   members,
   onAddMember,
@@ -574,6 +547,7 @@ function CardModal({
   onDelete,
 }: {
   card: Card;
+  isNew: boolean;
   lists: List[];
   members: Member[];
   onAddMember: (name: string) => Promise<Member>;
@@ -612,9 +586,14 @@ function CardModal({
       >
         <input
           value={title}
+          autoFocus={isNew}
+          onFocus={(e) => {
+            if (isNew) e.target.select();
+          }}
           onChange={(e) => setTitle(e.target.value)}
-          onBlur={() => onChange({ title: title.trim() || card.title })}
-          className="w-full rounded-lg border border-slate-300 p-2 font-medium text-slate-800 outline-none focus:ring-2 focus:ring-sky-400"
+          onBlur={() => onChange({ title: title.trim() || "Nouvelle tâche" })}
+          placeholder="Titre de la tâche"
+          className="w-full rounded-lg border border-slate-300 p-2 text-base font-medium text-slate-800 outline-none focus:ring-2 focus:ring-sky-400"
         />
 
         {/* Déplacer vers une colonne (= changer le statut) */}

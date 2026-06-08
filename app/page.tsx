@@ -101,7 +101,7 @@ export default function HomePage() {
                 </Link>
                 <button
                   onClick={() => remove(b.id)}
-                  className="absolute right-2 top-2 hidden rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-red-500 group-hover:block"
+                  className="absolute right-2 top-2 rounded p-1 text-slate-300 hover:bg-slate-100 hover:text-red-500"
                   aria-label="Supprimer"
                 >
                   ✕
