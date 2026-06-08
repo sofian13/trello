@@ -32,6 +32,16 @@ export async function createBoardWithDefaults(name: string): Promise<Board> {
   return board;
 }
 
+export async function fetchBoard(id: string): Promise<Board | null> {
+  const { data, error } = await supabase
+    .from("boards")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 export async function renameBoard(id: string, name: string) {
   const { error } = await supabase.from("boards").update({ name }).eq("id", id);
   if (error) throw error;

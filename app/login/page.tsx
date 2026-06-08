@@ -29,15 +29,17 @@ function LoginForm() {
   }
 
   return (
-    <main className="min-h-dvh flex items-center justify-center bg-slate-100 p-4">
+    <main className="flex min-h-dvh items-center justify-center bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 p-4">
       <form
         onSubmit={submit}
-        className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4"
+        className="w-full max-w-sm space-y-5 rounded-3xl border border-white/10 bg-white/10 p-7 shadow-2xl backdrop-blur-xl"
       >
-        <div className="text-center space-y-1">
-          <div className="text-3xl">🗂️</div>
-          <h1 className="text-xl font-bold text-slate-800">TeamBoard</h1>
-          <p className="text-sm text-slate-500">Entre le mot de passe d&apos;équipe</p>
+        <div className="space-y-2 text-center">
+          <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-sky-400 to-indigo-500 text-2xl shadow-lg">
+            🗂️
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-white">TeamBoard</h1>
+          <p className="text-sm text-white/50">Entre le mot de passe d&apos;équipe</p>
         </div>
         <input
           type="password"
@@ -45,15 +47,15 @@ function LoginForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Mot de passe"
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 outline-none focus:ring-2 focus:ring-sky-400"
+          className="w-full rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-white placeholder:text-white/40 outline-none transition focus:border-sky-400/60 focus:bg-white/15"
         />
         {error && (
-          <p className="text-sm text-red-500">Mot de passe incorrect.</p>
+          <p className="text-sm text-red-400">Mot de passe incorrect.</p>
         )}
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-sky-600 py-2 font-medium text-white hover:bg-sky-700 disabled:opacity-50"
+          className="w-full rounded-xl bg-gradient-to-br from-sky-500 to-indigo-500 py-2.5 font-medium text-white shadow-lg shadow-indigo-900/40 transition hover:brightness-110 disabled:opacity-50"
         >
           {loading ? "..." : "Entrer"}
         </button>

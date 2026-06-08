@@ -11,6 +11,7 @@ import {
 } from "@hello-pangea/dnd";
 import { supabase } from "@/lib/supabase";
 import {
+  fetchBoard,
   fetchLists,
   fetchCards,
   createList,
@@ -67,6 +68,35 @@ function Avatar({ member, size = 24 }: { member: Member; size?: number }) {
   );
 }
 
+// Couleur d'accent d'une colonne d'après son nom (statut).
+function columnAccent(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes("faire")) return "#64748b";
+  if (n.includes("cours")) return "#f59e0b";
+  if (n.includes("termin")) return "#22c55e";
+  return "#0ea5e9";
+}
+
+function IconColumns() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="1.5" y="2.5" width="3.5" height="11" rx="1" fill="currentColor" />
+      <rect x="6.25" y="2.5" width="3.5" height="11" rx="1" fill="currentColor" />
+      <rect x="11" y="2.5" width="3.5" height="11" rx="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+function IconRows() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="2.5" y="1.5" width="11" height="3.5" rx="1" fill="currentColor" />
+      <rect x="2.5" y="6.25" width="11" height="3.5" rx="1" fill="currentColor" />
+      <rect x="2.5" y="11" width="11" height="3.5" rx="1" fill="currentColor" />
+    </svg>
+  );
+}
+
 export default function BoardPage() {
   const params = useParams<{ id: string }>();
   const boardId = params.id;
@@ -78,6 +108,21 @@ export default function BoardPage() {
   const [editing, setEditing] = useState<Card | null>(null);
   const [editingNew, setEditingNew] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
+  const [boardName, setBoardName] = useState("");
+  const [layout, setLayout] = useState<"horizontal" | "vertical">("horizontal");
+
+  useEffect(() => {
+    const saved =
+      typeof window !== "undefined" ? localStorage.getItem("tb_layout") : null;
+    if (saved === "vertical" || saved === "horizontal") setLayout(saved);
+  }, []);
+
+  function changeLayout(l: "horizontal" | "vertical") {
+    setLayout(l);
+    try {
+      localStorage.setItem("tb_layout", l);
+    } catch {}
+  }
 
   async function load() {
     const ls = await fetchLists(boardId);
@@ -93,6 +138,7 @@ export default function BoardPage() {
   useEffect(() => {
     load();
     loadMembers();
+    fetchBoard(boardId).then((b) => b && setBoardName(b.name));
     const ch = supabase
       .channel(`board-${boardId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "lists" }, load)
@@ -251,135 +297,197 @@ export default function BoardPage() {
     await updateCard(card.id, { list_id: listId, position: pos });
   }
 
+  const isV = layout === "vertical";
+
   if (loading) {
     return (
-      <main className="min-h-dvh bg-slate-800 p-4 text-slate-200">Chargement…</main>
+      <main className="grid h-dvh place-items-center bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 text-white/70">
+        <div className="animate-pulse text-sm">Chargement…</div>
+      </main>
     );
   }
 
   return (
-    <main className="flex h-dvh flex-col bg-slate-800">
-      <header className="flex items-center justify-between gap-3 px-4 py-3 text-white">
-        <Link href="/" className="rounded px-2 py-1 hover:bg-white/10">
-          ← Tableaux
-        </Link>
+    <main className="flex h-dvh flex-col bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 text-white">
+      <header className="flex items-center justify-between gap-3 border-b border-white/10 bg-white/5 px-3 py-2.5 backdrop-blur-xl sm:px-4">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Link
+            href="/"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/10 text-lg transition hover:bg-white/20"
+            aria-label="Retour aux tableaux"
+          >
+            ←
+          </Link>
+          <h1 className="truncate text-base font-semibold tracking-tight sm:text-lg">
+            {boardName || "Tableau"}
+          </h1>
+        </div>
+
         <div className="flex items-center gap-2">
-          <div className="flex -space-x-2">
-            {members.slice(0, 6).map((m) => (
+          {/* Bascule disposition */}
+          <div className="flex rounded-xl bg-white/10 p-0.5">
+            <button
+              onClick={() => changeLayout("horizontal")}
+              title="Colonnes côte à côte"
+              className={`grid h-8 w-9 place-items-center rounded-lg transition ${
+                !isV ? "bg-white text-slate-900" : "text-white/60 hover:text-white"
+              }`}
+            >
+              <IconColumns />
+            </button>
+            <button
+              onClick={() => changeLayout("vertical")}
+              title="Colonnes empilées (sans swipe)"
+              className={`grid h-8 w-9 place-items-center rounded-lg transition ${
+                isV ? "bg-white text-slate-900" : "text-white/60 hover:text-white"
+              }`}
+            >
+              <IconRows />
+            </button>
+          </div>
+
+          <div className="hidden -space-x-2 sm:flex">
+            {members.slice(0, 5).map((m) => (
               <Avatar key={m.id} member={m} />
             ))}
           </div>
           <button
             onClick={() => setShowMembers(true)}
-            className="rounded-lg bg-white/10 px-3 py-1 text-sm hover:bg-white/20"
+            className="flex items-center gap-1.5 rounded-xl bg-white/10 px-3 py-1.5 text-sm transition hover:bg-white/20"
           >
-            👥 Membres
+            👥<span className="hidden sm:inline">Membres</span>
           </button>
         </div>
       </header>
 
       <DragDropContext onDragEnd={onDragEnd}>
-        <Droppable droppableId="board" direction="horizontal" type="list">
+        <Droppable
+          droppableId="board"
+          direction={isV ? "vertical" : "horizontal"}
+          type="list"
+        >
           {(provided) => (
             <div
               ref={provided.innerRef}
               {...provided.droppableProps}
-              className="flex flex-1 items-start gap-3 overflow-x-auto px-4 pb-4"
+              className={
+                isV
+                  ? "mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 overflow-y-auto p-4"
+                  : "flex flex-1 items-start gap-4 overflow-x-auto p-4"
+              }
             >
-              {lists.map((list, index) => (
-                <Draggable key={list.id} draggableId={list.id} index={index}>
-                  {(prov) => (
-                    <div
-                      ref={prov.innerRef}
-                      {...prov.draggableProps}
-                      className="flex max-h-full w-72 shrink-0 flex-col rounded-xl bg-slate-100"
-                    >
-                      <ListHeader
-                        list={list}
-                        dragHandleProps={prov.dragHandleProps}
-                        onRename={(name) => {
-                          setLists((prev) =>
-                            prev.map((l) =>
-                              l.id === list.id ? { ...l, name } : l
-                            )
-                          );
-                          renameList(list.id, name);
-                        }}
-                        onDelete={() => removeList(list.id)}
-                      />
+              {lists.map((list, index) => {
+                const accent = columnAccent(list.name);
+                const count = cardsByList[list.id]?.length ?? 0;
+                return (
+                  <Draggable key={list.id} draggableId={list.id} index={index}>
+                    {(prov) => (
+                      <div
+                        ref={prov.innerRef}
+                        {...prov.draggableProps}
+                        className={`flex flex-col rounded-2xl bg-white/95 shadow-xl shadow-black/20 ring-1 ring-black/5 ${
+                          isV ? "w-full" : "max-h-full w-[300px] shrink-0"
+                        }`}
+                      >
+                        <div
+                          style={{ background: accent }}
+                          className="h-1.5 rounded-t-2xl"
+                        />
+                        <ListHeader
+                          list={list}
+                          accent={accent}
+                          count={count}
+                          dragHandleProps={prov.dragHandleProps}
+                          onRename={(name) => {
+                            setLists((prev) =>
+                              prev.map((l) =>
+                                l.id === list.id ? { ...l, name } : l
+                              )
+                            );
+                            renameList(list.id, name);
+                          }}
+                          onDelete={() => removeList(list.id)}
+                        />
 
-                      <Droppable droppableId={list.id} type="card">
-                        {(p, snap) => (
-                          <div
-                            ref={p.innerRef}
-                            {...p.droppableProps}
-                            className={`flex-1 space-y-2 overflow-y-auto px-2 ${
-                              snap.isDraggingOver ? "bg-slate-200" : ""
-                            }`}
-                          >
-                            {(cardsByList[list.id] ?? []).map((card, ci) => (
-                              <Draggable
-                                key={card.id}
-                                draggableId={card.id}
-                                index={ci}
-                              >
-                                {(cp) => (
-                                  <div
-                                    ref={cp.innerRef}
-                                    {...cp.draggableProps}
-                                    {...cp.dragHandleProps}
-                                    onClick={() => openCard(card)}
-                                    className="cursor-pointer overflow-hidden rounded-lg bg-white text-sm text-slate-800 shadow-sm hover:bg-slate-50"
-                                  >
-                                    {card.color && (
-                                      <div
-                                        style={{ background: card.color }}
-                                        className="h-1.5 w-full"
-                                      />
-                                    )}
-                                    <div className="p-2">
-                                      <div>
-                                        {card.title}
-                                        {card.description && (
-                                          <span className="ml-1 text-slate-400">
-                                            ≡
-                                          </span>
+                        <Droppable droppableId={list.id} type="card">
+                          {(p, snap) => (
+                            <div
+                              ref={p.innerRef}
+                              {...p.droppableProps}
+                              className={`space-y-2 px-2 transition-colors ${
+                                isV ? "" : "flex-1 overflow-y-auto"
+                              } ${snap.isDraggingOver ? "bg-slate-100" : ""}`}
+                            >
+                              {(cardsByList[list.id] ?? []).map((card, ci) => (
+                                <Draggable
+                                  key={card.id}
+                                  draggableId={card.id}
+                                  index={ci}
+                                >
+                                  {(cp, csnap) => (
+                                    <div
+                                      ref={cp.innerRef}
+                                      {...cp.draggableProps}
+                                      {...cp.dragHandleProps}
+                                      onClick={() => openCard(card)}
+                                      className={`group cursor-pointer overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70 transition hover:-translate-y-0.5 hover:shadow-md ${
+                                        csnap.isDragging
+                                          ? "rotate-1 shadow-lg"
+                                          : ""
+                                      }`}
+                                    >
+                                      {card.color && (
+                                        <div
+                                          style={{ background: card.color }}
+                                          className="h-1.5 w-full"
+                                        />
+                                      )}
+                                      <div className="p-2.5">
+                                        <div className="flex items-start justify-between gap-2">
+                                          <p className="text-[13px] font-medium leading-snug text-slate-800">
+                                            {card.title}
+                                          </p>
+                                          {card.description && (
+                                            <span className="shrink-0 text-xs text-slate-300">
+                                              📝
+                                            </span>
+                                          )}
+                                        </div>
+                                        {card.assignee_ids.length > 0 && (
+                                          <div className="mt-2 flex justify-end">
+                                            <div className="flex -space-x-2">
+                                              {card.assignee_ids
+                                                .map((id) => membersById[id])
+                                                .filter(Boolean)
+                                                .slice(0, 4)
+                                                .map((m) => (
+                                                  <Avatar
+                                                    key={m.id}
+                                                    member={m}
+                                                    size={22}
+                                                  />
+                                                ))}
+                                            </div>
+                                          </div>
                                         )}
                                       </div>
-                                      {card.assignee_ids.length > 0 && (
-                                        <div className="mt-2 flex justify-end">
-                                          <div className="flex -space-x-2">
-                                            {card.assignee_ids
-                                              .map((id) => membersById[id])
-                                              .filter(Boolean)
-                                              .slice(0, 4)
-                                              .map((m) => (
-                                                <Avatar
-                                                  key={m.id}
-                                                  member={m}
-                                                  size={22}
-                                                />
-                                              ))}
-                                          </div>
-                                        </div>
-                                      )}
                                     </div>
-                                  </div>
-                                )}
-                              </Draggable>
-                            ))}
-                            {p.placeholder}
-                          </div>
-                        )}
-                      </Droppable>
+                                  )}
+                                </Draggable>
+                              ))}
+                              {p.placeholder}
+                            </div>
+                          )}
+                        </Droppable>
 
-                      <AddCard onAdd={() => addCardAndOpen(list.id)} />
-                    </div>
-                  )}
-                </Draggable>
-              ))}
+                        <AddCard onAdd={() => addCardAndOpen(list.id)} />
+                      </div>
+                    )}
+                  </Draggable>
+                );
+              })}
               {provided.placeholder}
-              <AddList onAdd={addList} />
+              <AddList onAdd={addList} vertical={isV} />
             </div>
           )}
         </Droppable>
@@ -425,11 +533,15 @@ export default function BoardPage() {
 
 function ListHeader({
   list,
+  accent,
+  count,
   dragHandleProps,
   onRename,
   onDelete,
 }: {
   list: List;
+  accent: string;
+  count: number;
   dragHandleProps: React.HTMLAttributes<HTMLDivElement> | null | undefined;
   onRename: (name: string) => void;
   onDelete: () => void;
@@ -440,7 +552,7 @@ function ListHeader({
   return (
     <div
       {...dragHandleProps}
-      className="flex items-center justify-between gap-2 p-2"
+      className="flex items-center justify-between gap-2 px-3 py-2.5"
     >
       {editing ? (
         <input
@@ -453,19 +565,26 @@ function ListHeader({
             else setName(list.name);
           }}
           onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-          className="w-full rounded border border-slate-300 px-1 text-sm font-semibold text-slate-800"
+          className="w-full rounded border border-slate-300 px-1 text-sm font-bold text-slate-800"
         />
       ) : (
         <h2
           onClick={() => setEditing(true)}
-          className="flex-1 cursor-text text-sm font-semibold text-slate-700"
+          className="flex flex-1 cursor-text items-center gap-2 text-sm font-bold uppercase tracking-wide text-slate-700"
         >
-          {list.name}
+          <span
+            style={{ background: accent }}
+            className="h-2.5 w-2.5 shrink-0 rounded-full"
+          />
+          <span className="truncate">{list.name}</span>
+          <span className="rounded-full bg-slate-100 px-1.5 text-xs font-semibold text-slate-400">
+            {count}
+          </span>
         </h2>
       )}
       <button
         onClick={onDelete}
-        className="text-slate-400 hover:text-red-500"
+        className="shrink-0 text-slate-300 transition hover:text-red-500"
         aria-label="Supprimer la colonne"
       >
         ✕
@@ -485,22 +604,29 @@ function AddCard({ onAdd }: { onAdd: () => void }) {
   );
 }
 
-function AddList({ onAdd }: { onAdd: (name: string) => void }) {
+function AddList({
+  onAdd,
+  vertical,
+}: {
+  onAdd: (name: string) => void;
+  vertical: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const width = vertical ? "w-full" : "w-[300px] shrink-0";
 
   if (!open) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="w-72 shrink-0 rounded-xl bg-white/20 px-3 py-2 text-left text-sm text-white hover:bg-white/30"
+        className={`${width} rounded-2xl border border-dashed border-white/25 bg-white/5 px-3 py-2.5 text-left text-sm text-white/70 transition hover:bg-white/10 hover:text-white`}
       >
         + Ajouter une colonne
       </button>
     );
   }
   return (
-    <div className="w-72 shrink-0 rounded-xl bg-slate-100 p-2">
+    <div className={`${width} rounded-2xl bg-white/95 p-2 shadow-xl`}>
       <input
         autoFocus
         value={name}
