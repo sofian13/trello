@@ -414,9 +414,13 @@ export default function BoardPage() {
                             <div
                               ref={p.innerRef}
                               {...p.droppableProps}
-                              className={`space-y-2 px-2 transition-colors ${
+                              className={`min-h-[3.5rem] space-y-2 px-2 pb-2 transition-colors ${
                                 isV ? "" : "flex-1 overflow-y-auto"
-                              } ${snap.isDraggingOver ? "bg-slate-100" : ""}`}
+                              } ${
+                                snap.isDraggingOver
+                                  ? "bg-sky-50 ring-2 ring-inset ring-sky-300"
+                                  : ""
+                              }`}
                             >
                               {(cardsByList[list.id] ?? []).map((card, ci) => (
                                 <Draggable
