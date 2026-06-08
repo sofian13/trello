@@ -158,3 +158,26 @@ export async function deleteMember(id: string) {
   const { error } = await supabase.from("members").delete().eq("id", id);
   if (error) throw error;
 }
+
+// ---- Push subscriptions ----
+export async function savePushSubscription(
+  endpoint: string,
+  subscription: unknown,
+  memberId: string | null
+) {
+  const { error } = await supabase
+    .from("push_subscriptions")
+    .upsert(
+      { endpoint, subscription, member_id: memberId },
+      { onConflict: "endpoint" }
+    );
+  if (error) throw error;
+}
+
+export async function deletePushSubscription(endpoint: string) {
+  const { error } = await supabase
+    .from("push_subscriptions")
+    .delete()
+    .eq("endpoint", endpoint);
+  if (error) throw error;
+}

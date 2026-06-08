@@ -25,6 +25,14 @@ import {
   createMember,
   deleteMember,
 } from "@/lib/db";
+import {
+  enablePush,
+  disablePush,
+  isPushEnabled,
+  isPushSupported,
+  getMyMemberId,
+  sendNotification,
+} from "@/lib/push";
 import type { List, Card, Member } from "@/lib/types";
 
 const LABEL_COLORS = [
@@ -110,6 +118,27 @@ export default function BoardPage() {
   const [showMembers, setShowMembers] = useState(false);
   const [boardName, setBoardName] = useState("");
   const [layout, setLayout] = useState<"horizontal" | "vertical">("horizontal");
+  const [showNotif, setShowNotif] = useState(false);
+  const [pushOn, setPushOn] = useState(false);
+
+  useEffect(() => {
+    isPushEnabled().then(setPushOn);
+  }, []);
+
+  const boardUrl = `/board/${boardId}`;
+
+  // Notifie quand une carte arrive en colonne "Terminé".
+  function notifyIfDone(listId: string, title: string) {
+    const l = lists.find((x) => x.id === listId);
+    if (l && l.name.toLowerCase().includes("termin")) {
+      sendNotification({
+        title: "✅ Carte terminée",
+        body: title,
+        url: boardUrl,
+        excludeMemberId: getMyMemberId(),
+      });
+    }
+  }
 
   useEffect(() => {
     const saved =
@@ -225,6 +254,8 @@ export default function BoardPage() {
     moved.list_id = toId;
     to.splice(destination.index, 0, moved);
 
+    if (fromId !== toId) notifyIfDone(toId, moved.title);
+
     // Mise à jour optimiste de l'état local
     setCards((prev) => {
       const others = prev.filter(
@@ -271,6 +302,20 @@ export default function BoardPage() {
   }
 
   function closeCard() {
+    // Notifie l'équipe d'une nouvelle carte (si titre renseigné)
+    if (
+      editingNew &&
+      editing &&
+      editing.title.trim() &&
+      editing.title !== "Nouvelle tâche"
+    ) {
+      sendNotification({
+        title: "🆕 Nouvelle carte",
+        body: `${boardName ? boardName + " — " : ""}${editing.title}`,
+        url: boardUrl,
+        excludeMemberId: getMyMemberId(),
+      });
+    }
     setEditing(null);
     setEditingNew(false);
   }
@@ -294,6 +339,7 @@ export default function BoardPage() {
     setEditing((cur) =>
       cur && cur.id === card.id ? { ...cur, list_id: listId, position: pos } : cur
     );
+    notifyIfDone(listId, card.title);
     await updateCard(card.id, { list_id: listId, position: pos });
   }
 
@@ -351,6 +397,17 @@ export default function BoardPage() {
               <Avatar key={m.id} member={m} />
             ))}
           </div>
+          <button
+            onClick={() => setShowNotif(true)}
+            title="Notifications"
+            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm transition ${
+              pushOn
+                ? "bg-sky-500/30 text-sky-200 hover:bg-sky-500/40"
+                : "bg-white/10 hover:bg-white/20"
+            }`}
+          >
+            {pushOn ? "🔔" : "🔕"}
+          </button>
           <button
             onClick={() => setShowMembers(true)}
             className="flex items-center gap-1.5 rounded-xl bg-white/10 px-3 py-1.5 text-sm transition hover:bg-white/20"
@@ -504,6 +561,17 @@ export default function BoardPage() {
           lists={lists}
           members={members}
           onAddMember={addMember}
+          onAssign={(member) => {
+            const me = getMyMemberId();
+            if (member.id === me) return;
+            sendNotification({
+              title: "📌 On t'a assigné une carte",
+              body: editing.title,
+              url: boardUrl,
+              toMemberId: member.id,
+              excludeMemberId: me,
+            });
+          }}
           onMove={(listId) => moveCardToList(editing, listId)}
           onClose={closeCard}
           onChange={(fields) => {
@@ -527,6 +595,17 @@ export default function BoardPage() {
           onClose={() => setShowMembers(false)}
           onAdd={addMember}
           onDelete={removeMember}
+        />
+      )}
+
+      {showNotif && (
+        <NotifModal
+          members={members}
+          enabled={pushOn}
+          onAddMember={addMember}
+          onClose={() => setShowNotif(false)}
+          onEnabled={() => setPushOn(true)}
+          onDisabled={() => setPushOn(false)}
         />
       )}
     </main>
@@ -671,6 +750,7 @@ function CardModal({
   lists,
   members,
   onAddMember,
+  onAssign,
   onMove,
   onClose,
   onChange,
@@ -681,6 +761,7 @@ function CardModal({
   lists: List[];
   members: Member[];
   onAddMember: (name: string) => Promise<Member>;
+  onAssign: (member: Member) => void;
   onMove: (listId: string) => void;
   onClose: () => void;
   onChange: (fields: Partial<Card>) => void;
@@ -690,11 +771,13 @@ function CardModal({
   const [description, setDescription] = useState(card.description);
   const [newMember, setNewMember] = useState("");
 
-  function toggleAssignee(id: string) {
-    const next = card.assignee_ids.includes(id)
-      ? card.assignee_ids.filter((a) => a !== id)
-      : [...card.assignee_ids, id];
+  function toggleAssignee(member: Member) {
+    const has = card.assignee_ids.includes(member.id);
+    const next = has
+      ? card.assignee_ids.filter((a) => a !== member.id)
+      : [...card.assignee_ids, member.id];
     onChange({ assignee_ids: next });
+    if (!has) onAssign(member); // notif seulement à l'ajout
   }
 
   async function quickAdd() {
@@ -703,6 +786,7 @@ function CardModal({
     setNewMember("");
     const m = await onAddMember(n);
     onChange({ assignee_ids: [...card.assignee_ids, m.id] });
+    onAssign(m);
   }
 
   return (
@@ -785,7 +869,7 @@ function CardModal({
             return (
               <button
                 key={m.id}
-                onClick={() => toggleAssignee(m.id)}
+                onClick={() => toggleAssignee(m)}
                 style={
                   on
                     ? { background: m.color, color: "white", borderColor: m.color }
@@ -916,6 +1000,159 @@ function MembersModal({
             Ajouter
           </button>
         </div>
+        <button
+          onClick={onClose}
+          className="mt-4 w-full rounded-lg bg-slate-100 py-2 text-sm text-slate-600 hover:bg-slate-200"
+        >
+          Fermer
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function NotifModal({
+  members,
+  enabled,
+  onAddMember,
+  onClose,
+  onEnabled,
+  onDisabled,
+}: {
+  members: Member[];
+  enabled: boolean;
+  onAddMember: (name: string) => Promise<Member>;
+  onClose: () => void;
+  onEnabled: () => void;
+  onDisabled: () => void;
+}) {
+  const supported = isPushSupported();
+  const [meId, setMeId] = useState<string | null>(getMyMemberId());
+  const [newName, setNewName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function activate() {
+    let id = meId;
+    if (!id && newName.trim()) {
+      const m = await onAddMember(newName.trim());
+      id = m.id;
+      setMeId(id);
+    }
+    if (!id) {
+      setMsg("Choisis d'abord qui tu es.");
+      return;
+    }
+    setBusy(true);
+    setMsg("");
+    const res = await enablePush(id);
+    setBusy(false);
+    if (res === "ok") {
+      onEnabled();
+      setMsg("✅ Notifications activées sur cet appareil !");
+    } else if (res === "denied") {
+      setMsg(
+        "❌ Permission refusée. Autorise les notifications pour ce site dans les réglages."
+      );
+    } else {
+      setMsg(
+        "⚠️ Non supporté ici. Sur iPhone, ajoute d'abord l'app à l'écran d'accueil."
+      );
+    }
+  }
+
+  async function deactivate() {
+    setBusy(true);
+    await disablePush();
+    setBusy(false);
+    onDisabled();
+    setMsg("Notifications désactivées sur cet appareil.");
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="mb-1 text-lg font-bold text-slate-800">
+          🔔 Notifications
+        </h2>
+        <p className="mb-3 text-sm text-slate-500">
+          Sois prévenu quand on t&apos;assigne une carte, qu&apos;une carte est
+          créée ou passée en Terminé.
+        </p>
+
+        {!supported ? (
+          <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
+            Ton navigateur ne supporte pas les notifications.
+            <br />
+            📱 Sur iPhone : ajoute d&apos;abord l&apos;app à l&apos;écran
+            d&apos;accueil (Partager → « Sur l&apos;écran d&apos;accueil »), puis
+            rouvre-la.
+          </p>
+        ) : (
+          <>
+            <p className="mb-1 text-xs font-semibold uppercase text-slate-400">
+              Tu es qui ?
+            </p>
+            <div className="mb-2 flex flex-wrap gap-2">
+              {members.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => setMeId(m.id)}
+                  style={
+                    meId === m.id
+                      ? { background: m.color, color: "white", borderColor: m.color }
+                      : { borderColor: m.color, color: m.color }
+                  }
+                  className="flex items-center gap-1 rounded-full border px-2 py-1 text-sm"
+                >
+                  <span className="font-semibold">{initials(m.name)}</span>
+                  {m.name}
+                  {meId === m.id && <span>✓</span>}
+                </button>
+              ))}
+            </div>
+            {members.length === 0 && (
+              <input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Ton prénom…"
+                className="mb-2 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-sky-400"
+              />
+            )}
+
+            {enabled ? (
+              <button
+                onClick={deactivate}
+                disabled={busy}
+                className="w-full rounded-lg bg-slate-100 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200 disabled:opacity-50"
+              >
+                Désactiver sur cet appareil
+              </button>
+            ) : (
+              <button
+                onClick={activate}
+                disabled={busy}
+                className="w-full rounded-lg bg-sky-600 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50"
+              >
+                {busy ? "..." : "Activer les notifications"}
+              </button>
+            )}
+
+            <p className="mt-2 text-[11px] text-slate-400">
+              📱 iPhone : ne marche qu&apos;une fois l&apos;app ajoutée à
+              l&apos;écran d&apos;accueil (iOS 16.4+).
+            </p>
+          </>
+        )}
+
+        {msg && <p className="mt-2 text-sm text-slate-600">{msg}</p>}
+
         <button
           onClick={onClose}
           className="mt-4 w-full rounded-lg bg-slate-100 py-2 text-sm text-slate-600 hover:bg-slate-200"
