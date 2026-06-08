@@ -20,8 +20,58 @@ import {
   createCard,
   updateCard,
   deleteCard,
+  fetchMembers,
+  createMember,
+  deleteMember,
 } from "@/lib/db";
-import type { List, Card } from "@/lib/types";
+import type { List, Card, Member, CardStatus } from "@/lib/types";
+
+const STATUSES: { key: CardStatus; label: string; color: string }[] = [
+  { key: "todo", label: "À faire", color: "#64748b" },
+  { key: "in_progress", label: "En cours", color: "#f59e0b" },
+  { key: "done", label: "Terminé", color: "#22c55e" },
+];
+
+const LABEL_COLORS = [
+  "#ef4444",
+  "#f97316",
+  "#eab308",
+  "#22c55e",
+  "#0ea5e9",
+  "#a855f7",
+  "#ec4899",
+  "#64748b",
+];
+
+const MEMBER_COLORS = [
+  "#0284c7",
+  "#16a34a",
+  "#dc2626",
+  "#9333ea",
+  "#ea580c",
+  "#0d9488",
+  "#db2777",
+  "#475569",
+];
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+function Avatar({ member, size = 24 }: { member: Member; size?: number }) {
+  return (
+    <span
+      title={member.name}
+      style={{ background: member.color, width: size, height: size }}
+      className="inline-flex shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white ring-2 ring-white"
+    >
+      {initials(member.name)}
+    </span>
+  );
+}
 
 export default function BoardPage() {
   const params = useParams<{ id: string }>();
@@ -29,8 +79,10 @@ export default function BoardPage() {
 
   const [lists, setLists] = useState<List[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Card | null>(null);
+  const [showMembers, setShowMembers] = useState(false);
 
   async function load() {
     const ls = await fetchLists(boardId);
@@ -39,18 +91,54 @@ export default function BoardPage() {
     setLoading(false);
   }
 
+  async function loadMembers() {
+    setMembers(await fetchMembers());
+  }
+
   useEffect(() => {
     load();
+    loadMembers();
     const ch = supabase
       .channel(`board-${boardId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "lists" }, load)
       .on("postgres_changes", { event: "*", schema: "public", table: "cards" }, load)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "members" },
+        loadMembers
+      )
       .subscribe();
     return () => {
       supabase.removeChannel(ch);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boardId]);
+
+  const membersById = useMemo(() => {
+    const m: Record<string, Member> = {};
+    for (const x of members) m[x.id] = x;
+    return m;
+  }, [members]);
+
+  async function addMember(name: string): Promise<Member> {
+    const color = MEMBER_COLORS[members.length % MEMBER_COLORS.length];
+    const m = await createMember(name, color);
+    setMembers((prev) => [...prev, m]);
+    return m;
+  }
+
+  async function removeMember(id: string) {
+    setMembers((prev) => prev.filter((m) => m.id !== id));
+    // retire l'assignation de cette personne sur toutes les cartes affichées
+    setCards((prev) =>
+      prev.map((c) =>
+        c.assignee_ids.includes(id)
+          ? { ...c, assignee_ids: c.assignee_ids.filter((a) => a !== id) }
+          : c
+      )
+    );
+    await deleteMember(id);
+  }
 
   const cardsByList = useMemo(() => {
     const map: Record<string, Card[]> = {};
@@ -148,10 +236,23 @@ export default function BoardPage() {
 
   return (
     <main className="flex h-dvh flex-col bg-slate-800">
-      <header className="flex items-center gap-3 px-4 py-3 text-white">
+      <header className="flex items-center justify-between gap-3 px-4 py-3 text-white">
         <Link href="/" className="rounded px-2 py-1 hover:bg-white/10">
           ← Tableaux
         </Link>
+        <div className="flex items-center gap-2">
+          <div className="flex -space-x-2">
+            {members.slice(0, 6).map((m) => (
+              <Avatar key={m.id} member={m} />
+            ))}
+          </div>
+          <button
+            onClick={() => setShowMembers(true)}
+            className="rounded-lg bg-white/10 px-3 py-1 text-sm hover:bg-white/20"
+          >
+            👥 Membres
+          </button>
+        </div>
       </header>
 
       <DragDropContext onDragEnd={onDragEnd}>
@@ -205,12 +306,60 @@ export default function BoardPage() {
                                     {...cp.draggableProps}
                                     {...cp.dragHandleProps}
                                     onClick={() => setEditing(card)}
-                                    className="cursor-pointer rounded-lg bg-white p-2 text-sm text-slate-800 shadow-sm hover:bg-slate-50"
+                                    className="cursor-pointer overflow-hidden rounded-lg bg-white text-sm text-slate-800 shadow-sm hover:bg-slate-50"
                                   >
-                                    {card.title}
-                                    {card.description && (
-                                      <span className="ml-1 text-slate-400">≡</span>
+                                    {card.color && (
+                                      <div
+                                        style={{ background: card.color }}
+                                        className="h-1.5 w-full"
+                                      />
                                     )}
+                                    <div className="p-2">
+                                      <div>
+                                        {card.title}
+                                        {card.description && (
+                                          <span className="ml-1 text-slate-400">
+                                            ≡
+                                          </span>
+                                        )}
+                                      </div>
+                                      {(card.status !== "none" ||
+                                        card.assignee_ids.length > 0) && (
+                                        <div className="mt-2 flex items-center justify-between gap-2">
+                                          {(() => {
+                                            const st = STATUSES.find(
+                                              (s) => s.key === card.status
+                                            );
+                                            return st ? (
+                                              <span
+                                                style={{
+                                                  background: st.color + "22",
+                                                  color: st.color,
+                                                }}
+                                                className="rounded px-1.5 py-0.5 text-[11px] font-medium"
+                                              >
+                                                {st.label}
+                                              </span>
+                                            ) : (
+                                              <span />
+                                            );
+                                          })()}
+                                          <div className="flex -space-x-2">
+                                            {card.assignee_ids
+                                              .map((id) => membersById[id])
+                                              .filter(Boolean)
+                                              .slice(0, 4)
+                                              .map((m) => (
+                                                <Avatar
+                                                  key={m.id}
+                                                  member={m}
+                                                  size={22}
+                                                />
+                                              ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 )}
                               </Draggable>
@@ -235,21 +384,30 @@ export default function BoardPage() {
       {editing && (
         <CardModal
           card={editing}
+          members={members}
+          onAddMember={addMember}
           onClose={() => setEditing(null)}
-          onSave={(fields) => {
+          onChange={(fields) => {
             setCards((prev) =>
-              prev.map((c) =>
-                c.id === editing.id ? { ...c, ...fields } : c
-              )
+              prev.map((c) => (c.id === editing.id ? { ...c, ...fields } : c))
             );
+            setEditing((cur) => (cur ? { ...cur, ...fields } : cur));
             updateCard(editing.id, fields);
-            setEditing(null);
           }}
           onDelete={() => {
             setCards((prev) => prev.filter((c) => c.id !== editing.id));
             deleteCard(editing.id);
             setEditing(null);
           }}
+        />
+      )}
+
+      {showMembers && (
+        <MembersModal
+          members={members}
+          onClose={() => setShowMembers(false)}
+          onAdd={addMember}
+          onDelete={removeMember}
         />
       )}
     </main>
@@ -415,17 +573,37 @@ function AddList({ onAdd }: { onAdd: (name: string) => void }) {
 
 function CardModal({
   card,
+  members,
+  onAddMember,
   onClose,
-  onSave,
+  onChange,
   onDelete,
 }: {
   card: Card;
+  members: Member[];
+  onAddMember: (name: string) => Promise<Member>;
   onClose: () => void;
-  onSave: (fields: { title: string; description: string }) => void;
+  onChange: (fields: Partial<Card>) => void;
   onDelete: () => void;
 }) {
   const [title, setTitle] = useState(card.title);
   const [description, setDescription] = useState(card.description);
+  const [newMember, setNewMember] = useState("");
+
+  function toggleAssignee(id: string) {
+    const next = card.assignee_ids.includes(id)
+      ? card.assignee_ids.filter((a) => a !== id)
+      : [...card.assignee_ids, id];
+    onChange({ assignee_ids: next });
+  }
+
+  async function quickAdd() {
+    const n = newMember.trim();
+    if (!n) return;
+    setNewMember("");
+    const m = await onAddMember(n);
+    onChange({ assignee_ids: [...card.assignee_ids, m.id] });
+  }
 
   return (
     <div
@@ -433,45 +611,220 @@ function CardModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl bg-white p-4 shadow-xl"
+        className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          onBlur={() => onChange({ title: title.trim() || card.title })}
           className="w-full rounded-lg border border-slate-300 p-2 font-medium text-slate-800 outline-none focus:ring-2 focus:ring-sky-400"
         />
+
+        {/* Statut */}
+        <p className="mt-4 mb-1 text-xs font-semibold uppercase text-slate-400">
+          Statut
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => onChange({ status: "none" })}
+            className={`rounded-full border px-3 py-1 text-sm ${
+              card.status === "none"
+                ? "border-slate-400 bg-slate-100"
+                : "border-slate-200"
+            }`}
+          >
+            Aucun
+          </button>
+          {STATUSES.map((s) => (
+            <button
+              key={s.key}
+              onClick={() => onChange({ status: s.key })}
+              style={
+                card.status === s.key
+                  ? { background: s.color, color: "white", borderColor: s.color }
+                  : { color: s.color, borderColor: s.color }
+              }
+              className="rounded-full border px-3 py-1 text-sm font-medium"
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Couleur */}
+        <p className="mt-4 mb-1 text-xs font-semibold uppercase text-slate-400">
+          Couleur
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => onChange({ color: null })}
+            className={`h-7 w-7 rounded-full border-2 text-xs text-slate-400 ${
+              !card.color ? "border-slate-400" : "border-slate-200"
+            }`}
+            title="Aucune"
+          >
+            ✕
+          </button>
+          {LABEL_COLORS.map((c) => (
+            <button
+              key={c}
+              onClick={() => onChange({ color: c })}
+              style={{ background: c }}
+              className={`h-7 w-7 rounded-full ${
+                card.color === c ? "ring-2 ring-offset-2 ring-slate-500" : ""
+              }`}
+            />
+          ))}
+        </div>
+
+        {/* Assignés */}
+        <p className="mt-4 mb-1 text-xs font-semibold uppercase text-slate-400">
+          C&apos;est qui ?
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {members.map((m) => {
+            const on = card.assignee_ids.includes(m.id);
+            return (
+              <button
+                key={m.id}
+                onClick={() => toggleAssignee(m.id)}
+                style={
+                  on
+                    ? { background: m.color, color: "white", borderColor: m.color }
+                    : { borderColor: m.color, color: m.color }
+                }
+                className="flex items-center gap-1 rounded-full border px-2 py-1 text-sm"
+              >
+                <span className="font-semibold">{initials(m.name)}</span>
+                {m.name}
+                {on && <span>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-2 flex gap-2">
+          <input
+            value={newMember}
+            onChange={(e) => setNewMember(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && quickAdd()}
+            placeholder="+ Nouveau profil…"
+            className="flex-1 rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-sky-400"
+          />
+          <button
+            onClick={quickAdd}
+            className="rounded-lg bg-slate-100 px-3 py-1 text-sm text-slate-700 hover:bg-slate-200"
+          >
+            Ajouter
+          </button>
+        </div>
+
+        {/* Description */}
+        <p className="mt-4 mb-1 text-xs font-semibold uppercase text-slate-400">
+          Description
+        </p>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Description…"
-          rows={5}
-          className="mt-2 w-full resize-none rounded-lg border border-slate-300 p-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-sky-400"
+          onBlur={() => onChange({ description })}
+          placeholder="Détails…"
+          rows={4}
+          className="w-full resize-none rounded-lg border border-slate-300 p-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-sky-400"
         />
-        <div className="mt-3 flex items-center justify-between">
+
+        <div className="mt-4 flex items-center justify-between">
           <button
             onClick={onDelete}
             className="rounded px-3 py-1 text-sm text-red-500 hover:bg-red-50"
           >
             Supprimer
           </button>
-          <div className="flex gap-2">
-            <button
-              onClick={onClose}
-              className="rounded px-3 py-1 text-sm text-slate-500"
-            >
-              Annuler
-            </button>
-            <button
-              onClick={() =>
-                onSave({ title: title.trim() || card.title, description })
-              }
-              className="rounded bg-sky-600 px-3 py-1 text-sm text-white hover:bg-sky-700"
-            >
-              Enregistrer
-            </button>
-          </div>
+          <button
+            onClick={onClose}
+            className="rounded bg-sky-600 px-4 py-1 text-sm text-white hover:bg-sky-700"
+          >
+            Fermer
+          </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function MembersModal({
+  members,
+  onClose,
+  onAdd,
+  onDelete,
+}: {
+  members: Member[];
+  onClose: () => void;
+  onAdd: (name: string) => Promise<Member>;
+  onDelete: (id: string) => void;
+}) {
+  const [name, setName] = useState("");
+
+  async function add() {
+    const n = name.trim();
+    if (!n) return;
+    setName("");
+    await onAdd(n);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="mb-3 text-lg font-bold text-slate-800">👥 Profils</h2>
+        <ul className="space-y-2">
+          {members.length === 0 && (
+            <li className="text-sm text-slate-400">Aucun profil pour l&apos;instant.</li>
+          )}
+          {members.map((m) => (
+            <li
+              key={m.id}
+              className="flex items-center justify-between rounded-lg border border-slate-200 p-2"
+            >
+              <span className="flex items-center gap-2">
+                <Avatar member={m} />
+                <span className="text-sm text-slate-800">{m.name}</span>
+              </span>
+              <button
+                onClick={() => onDelete(m.id)}
+                className="text-slate-400 hover:text-red-500"
+                aria-label="Supprimer le profil"
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-3 flex gap-2">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && add()}
+            placeholder="Nom de la personne…"
+            className="flex-1 rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-sky-400"
+          />
+          <button
+            onClick={add}
+            className="rounded-lg bg-sky-600 px-3 py-1 text-sm text-white hover:bg-sky-700"
+          >
+            Ajouter
+          </button>
+        </div>
+        <button
+          onClick={onClose}
+          className="mt-4 w-full rounded-lg bg-slate-100 py-2 text-sm text-slate-600 hover:bg-slate-200"
+        >
+          Fermer
+        </button>
       </div>
     </div>
   );

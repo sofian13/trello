@@ -12,11 +12,23 @@ export type List = {
   created_at: string;
 };
 
+export type CardStatus = "none" | "todo" | "in_progress" | "done";
+
 export type Card = {
   id: string;
   list_id: string;
   title: string;
   description: string;
   position: number;
+  color: string | null;
+  status: CardStatus;
+  assignee_ids: string[];
+  created_at: string;
+};
+
+export type Member = {
+  id: string;
+  name: string;
+  color: string;
   created_at: string;
 };

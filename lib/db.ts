@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import type { Board, List, Card } from "./types";
+import type { Board, List, Card, Member } from "./types";
 
 // ---- Boards ----
 export async function fetchBoards(): Promise<Board[]> {
@@ -91,7 +91,18 @@ export async function createCard(listId: string, title: string, position: number
 
 export async function updateCard(
   id: string,
-  fields: Partial<Pick<Card, "title" | "description" | "list_id" | "position">>
+  fields: Partial<
+    Pick<
+      Card,
+      | "title"
+      | "description"
+      | "list_id"
+      | "position"
+      | "color"
+      | "status"
+      | "assignee_ids"
+    >
+  >
 ) {
   const { error } = await supabase.from("cards").update(fields).eq("id", id);
   if (error) throw error;
@@ -99,5 +110,30 @@ export async function updateCard(
 
 export async function deleteCard(id: string) {
   const { error } = await supabase.from("cards").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ---- Members (profils) ----
+export async function fetchMembers(): Promise<Member[]> {
+  const { data, error } = await supabase
+    .from("members")
+    .select("*")
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createMember(name: string, color: string): Promise<Member> {
+  const { data, error } = await supabase
+    .from("members")
+    .insert({ name, color })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteMember(id: string) {
+  const { error } = await supabase.from("members").delete().eq("id", id);
   if (error) throw error;
 }
