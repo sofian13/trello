@@ -33,6 +33,24 @@ create table if not exists members (
   created_at timestamptz not null default now()
 );
 
+-- Lieux de réunion (créés à l'avance, puis sélectionnés)
+create table if not exists locations (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  address text not null default '',
+  created_at timestamptz not null default now()
+);
+
+-- Réunions planifiées
+create table if not exists meetings (
+  id uuid primary key default gen_random_uuid(),
+  title text not null default '',
+  location_id uuid references locations(id) on delete set null,
+  starts_at timestamptz not null,
+  member_ids uuid[] not null default '{}',
+  created_at timestamptz not null default now()
+);
+
 -- Abonnements aux notifications push (un par appareil)
 create table if not exists push_subscriptions (
   id uuid primary key default gen_random_uuid(),
@@ -54,7 +72,9 @@ create index if not exists cards_list_idx on cards(list_id);
 do $$ begin alter publication supabase_realtime add table boards;  exception when duplicate_object then null; end $$;
 do $$ begin alter publication supabase_realtime add table lists;   exception when duplicate_object then null; end $$;
 do $$ begin alter publication supabase_realtime add table cards;   exception when duplicate_object then null; end $$;
-do $$ begin alter publication supabase_realtime add table members; exception when duplicate_object then null; end $$;
+do $$ begin alter publication supabase_realtime add table members;   exception when duplicate_object then null; end $$;
+do $$ begin alter publication supabase_realtime add table locations; exception when duplicate_object then null; end $$;
+do $$ begin alter publication supabase_realtime add table meetings;  exception when duplicate_object then null; end $$;
 
 -- RLS : accès via la clé anon/publishable (l'app est protégée par un mot de passe d'équipe).
 alter table boards  enable row level security;
@@ -62,15 +82,21 @@ alter table lists   enable row level security;
 alter table cards   enable row level security;
 alter table members enable row level security;
 alter table push_subscriptions enable row level security;
+alter table locations enable row level security;
+alter table meetings  enable row level security;
 
-drop policy if exists "anon_all_boards"  on boards;
-drop policy if exists "anon_all_lists"   on lists;
-drop policy if exists "anon_all_cards"   on cards;
-drop policy if exists "anon_all_members" on members;
-drop policy if exists "anon_all_push"    on push_subscriptions;
+drop policy if exists "anon_all_boards"    on boards;
+drop policy if exists "anon_all_lists"     on lists;
+drop policy if exists "anon_all_cards"     on cards;
+drop policy if exists "anon_all_members"   on members;
+drop policy if exists "anon_all_push"      on push_subscriptions;
+drop policy if exists "anon_all_locations" on locations;
+drop policy if exists "anon_all_meetings"  on meetings;
 
-create policy "anon_all_boards"  on boards  for all using (true) with check (true);
-create policy "anon_all_lists"   on lists   for all using (true) with check (true);
-create policy "anon_all_cards"   on cards   for all using (true) with check (true);
-create policy "anon_all_members" on members for all using (true) with check (true);
-create policy "anon_all_push"    on push_subscriptions for all using (true) with check (true);
+create policy "anon_all_boards"    on boards  for all using (true) with check (true);
+create policy "anon_all_lists"     on lists   for all using (true) with check (true);
+create policy "anon_all_cards"     on cards   for all using (true) with check (true);
+create policy "anon_all_members"   on members for all using (true) with check (true);
+create policy "anon_all_push"      on push_subscriptions for all using (true) with check (true);
+create policy "anon_all_locations" on locations for all using (true) with check (true);
+create policy "anon_all_meetings"  on meetings  for all using (true) with check (true);

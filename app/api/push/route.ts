@@ -23,9 +23,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, reason: "vapid-missing" });
   }
 
-  const { title, body, url, toMemberId, excludeMemberId } = await req
-    .json()
-    .catch(() => ({}));
+  const { title, body, url, toMemberId, toMemberIds, excludeMemberId } =
+    await req.json().catch(() => ({}));
 
   if (!title) return NextResponse.json({ ok: false, reason: "no-title" });
 
@@ -35,7 +34,13 @@ export async function POST(req: Request) {
   if (error) return NextResponse.json({ ok: false, reason: error.message });
 
   let rows = (data ?? []) as Row[];
-  if (toMemberId) rows = rows.filter((r) => r.member_id === toMemberId);
+  // Ciblage : un membre, une liste de membres, ou diffusion à tous
+  const targets: string[] | null = Array.isArray(toMemberIds)
+    ? toMemberIds
+    : toMemberId
+      ? [toMemberId]
+      : null;
+  if (targets) rows = rows.filter((r) => r.member_id && targets.includes(r.member_id));
   if (excludeMemberId)
     rows = rows.filter((r) => r.member_id !== excludeMemberId);
 

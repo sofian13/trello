@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import type { Board, List, Card, Member } from "./types";
+import type { Board, List, Card, Member, Location, Meeting } from "./types";
 
 // ---- Boards ----
 export async function fetchBoards(): Promise<Board[]> {
@@ -179,5 +179,63 @@ export async function deletePushSubscription(endpoint: string) {
     .from("push_subscriptions")
     .delete()
     .eq("endpoint", endpoint);
+  if (error) throw error;
+}
+
+// ---- Lieux ----
+export async function fetchLocations(): Promise<Location[]> {
+  const { data, error } = await supabase
+    .from("locations")
+    .select("*")
+    .order("name", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createLocation(
+  name: string,
+  address: string
+): Promise<Location> {
+  const { data, error } = await supabase
+    .from("locations")
+    .insert({ name, address })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteLocation(id: string) {
+  const { error } = await supabase.from("locations").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ---- Réunions ----
+export async function fetchMeetings(): Promise<Meeting[]> {
+  const { data, error } = await supabase
+    .from("meetings")
+    .select("*")
+    .order("starts_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createMeeting(m: {
+  title: string;
+  location_id: string | null;
+  starts_at: string;
+  member_ids: string[];
+}): Promise<Meeting> {
+  const { data, error } = await supabase
+    .from("meetings")
+    .insert(m)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteMeeting(id: string) {
+  const { error } = await supabase.from("meetings").delete().eq("id", id);
   if (error) throw error;
 }

@@ -66,12 +66,20 @@ export default function HomePage() {
           </span>
           TeamBoard
         </h1>
-        <button
-          onClick={logout}
-          className="rounded-xl bg-white/10 px-3 py-1.5 text-sm text-white/80 transition hover:bg-white/20 hover:text-white"
-        >
-          Déconnexion
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/meetings"
+            className="rounded-xl bg-white/10 px-3 py-1.5 text-sm text-white/90 transition hover:bg-white/20"
+          >
+            📅 Réunions
+          </Link>
+          <button
+            onClick={logout}
+            className="rounded-xl bg-white/10 px-3 py-1.5 text-sm text-white/80 transition hover:bg-white/20 hover:text-white"
+          >
+            Déconnexion
+          </button>
+        </div>
       </header>
 
       <div className="mx-auto max-w-3xl p-4 sm:p-6">

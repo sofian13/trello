@@ -78,6 +78,7 @@ type NotifPayload = {
   body: string;
   url?: string;
   toMemberId?: string | null; // ciblé sur un profil ; sinon diffusé à tous
+  toMemberIds?: string[]; // ciblé sur plusieurs profils
   excludeMemberId?: string | null; // ne pas notifier l'auteur
 };
 

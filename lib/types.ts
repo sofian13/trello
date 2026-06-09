@@ -32,3 +32,19 @@ export type Member = {
   color: string;
   created_at: string;
 };
+
+export type Location = {
+  id: string;
+  name: string;
+  address: string;
+  created_at: string;
+};
+
+export type Meeting = {
+  id: string;
+  title: string;
+  location_id: string | null;
+  starts_at: string;
+  member_ids: string[];
+  created_at: string;
+};
