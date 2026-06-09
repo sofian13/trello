@@ -49,6 +49,7 @@ import {
 import type { List, Card, Member } from "@/lib/types";
 import Avatar, { initials } from "@/components/Avatar";
 import ThemeToggle from "@/components/ThemeToggle";
+import { useKeyboardInset } from "@/lib/useKeyboardInset";
 
 const LABEL_COLORS = [
   "#E64980",
@@ -91,10 +92,11 @@ function Sheet({
   children: React.ReactNode;
   onClose: () => void;
 }) {
+  const kb = useKeyboardInset();
   return (
     <div
       className="anim-fade fixed inset-0 z-50 flex items-end justify-center"
-      style={{ background: "var(--scrim)" }}
+      style={{ background: "var(--scrim)", paddingBottom: kb }}
       onClick={onClose}
     >
       <div
@@ -491,10 +493,15 @@ export default function BoardPage() {
                                       {...cp.draggableProps}
                                       {...cp.dragHandleProps}
                                       onClick={() => openCard(card)}
-                                      className={`anim-pop cursor-pointer overflow-hidden rounded-[14px] border border-border bg-surface ${
-                                        csnap.isDragging ? "rotate-1" : ""
+                                      className={`cursor-pointer overflow-hidden rounded-[14px] border border-border bg-surface ${
+                                        csnap.isDragging
+                                          ? "rotate-1 shadow-lg"
+                                          : ""
                                       }`}
-                                      style={{ boxShadow: "var(--card-shadow)" }}
+                                      style={{
+                                        ...cp.draggableProps.style,
+                                        boxShadow: "var(--card-shadow)",
+                                      }}
                                     >
                                       {card.color && (
                                         <div

@@ -26,6 +26,7 @@ import { sendNotification, getMyMemberId } from "@/lib/push";
 import type { Member, Location, Meeting } from "@/lib/types";
 import Avatar, { initials } from "@/components/Avatar";
 import ThemeToggle from "@/components/ThemeToggle";
+import { useKeyboardInset } from "@/lib/useKeyboardInset";
 
 function fmt(iso: string) {
   return new Date(iso).toLocaleString("fr-FR", {
@@ -412,6 +413,7 @@ function LocationsModal({
 }) {
   const [name, setName] = useState("");
   const [addr, setAddr] = useState("");
+  const kb = useKeyboardInset();
 
   async function add() {
     if (!name.trim()) return;
@@ -423,7 +425,7 @@ function LocationsModal({
   return (
     <div
       className="anim-fade fixed inset-0 z-50 flex items-end justify-center"
-      style={{ background: "var(--scrim)" }}
+      style={{ background: "var(--scrim)", paddingBottom: kb }}
       onClick={onClose}
     >
       <div

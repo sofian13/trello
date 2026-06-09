@@ -17,6 +17,7 @@ import type { Board, List, Card, Member } from "@/lib/types";
 import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
 import Avatar from "@/components/Avatar";
+import { useKeyboardInset } from "@/lib/useKeyboardInset";
 
 const ACCENTS = ["#5B57F2", "#0CA678", "#F06595", "#0EA5E9", "#F08C00", "#9775FA"];
 
@@ -41,6 +42,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
+  const kb = useKeyboardInset();
 
   async function load() {
     try {
@@ -260,7 +262,7 @@ export default function HomePage() {
       {creating && (
         <div
           className="anim-fade fixed inset-0 z-50 flex items-end justify-center"
-          style={{ background: "var(--scrim)" }}
+          style={{ background: "var(--scrim)", paddingBottom: kb }}
           onClick={() => setCreating(false)}
         >
           <div
