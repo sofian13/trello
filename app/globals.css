@@ -1,26 +1,99 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* === CLAIR (défaut sur :root pour robustesse dev/prod) === */
+:root,
+[data-theme="light"] {
+  --bg:            #F6F7F9;
+  --surface:       #FFFFFF;
+  --inset:         #F1F2F5;
+  --border:        #ECEDF1;
+  --track:         #E7E8EC;
+  --text:          #1A1C22;
+  --muted:         #6B6F76;
+  --faint:         #9095A0;
+  --primary:       #5B57F2;
+  --primary-tint:  rgba(91,87,242,.12);
+  --solid:         #15161B;
+  --solid-text:    #FFFFFF;
+  --danger:        #D64545;
+  --danger-bg:     #FDF3F3;
+  --danger-border: #F3D2D2;
+  --scrim:         rgba(20,22,30,.42);
+  --card-shadow:   0 1px 2px rgba(20,22,40,.05);
+  --fab-shadow:    0 10px 24px -6px rgba(91,87,242,.5);
+}
+
+/* === SOMBRE === */
+[data-theme="dark"] {
+  --bg:            #0E0F13;
+  --surface:       #181A20;
+  --inset:         #1F2128;
+  --border:        #282A31;
+  --track:         #282A31;
+  --text:          #ECEDEF;
+  --muted:         #9295A0;
+  --faint:         #6E727D;
+  --primary:       #6C66F5;
+  --primary-tint:  rgba(108,102,245,.20);
+  --solid:         #ECEDEF;
+  --solid-text:    #15161B;
+  --danger:        #F07A7A;
+  --danger-bg:     rgba(214,69,69,.12);
+  --danger-border: rgba(214,69,69,.30);
+  --scrim:         rgba(0,0,0,.55);
+  --card-shadow:   none;
+  --fab-shadow:    0 10px 24px -6px rgba(91,87,242,.55);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-inset: var(--inset);
+  --color-border: var(--border);
+  --color-track: var(--track);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-primary: var(--primary);
+  --color-primary-tint: var(--primary-tint);
+  --color-solid: var(--solid);
+  --color-solid-text: var(--solid-text);
+  --color-danger: var(--danger);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--bg);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
 }
+
+/* Transition douce lors du changement de thème */
+*,
+*::before,
+*::after {
+  transition: background-color 0.28s, border-color 0.28s, color 0.18s,
+    box-shadow 0.28s;
+}
+
+@keyframes tbSheet {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes tbFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes tbPop {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.anim-sheet { animation: tbSheet 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
+.anim-fade { animation: tbFade 0.2s ease; }
+.anim-pop { animation: tbPop 0.22s ease both; }

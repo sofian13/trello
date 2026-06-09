@@ -1,21 +1,59 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { fetchBoards, createBoardWithDefaults, deleteBoard } from "@/lib/db";
+import { Plus, Trash2, Layers, Calendar, X, LogOut } from "lucide-react";
+import {
+  fetchBoards,
+  fetchAllLists,
+  fetchAllCards,
+  fetchMembers,
+  createBoardWithDefaults,
+  deleteBoard,
+} from "@/lib/db";
 import { supabase } from "@/lib/supabase";
-import type { Board } from "@/lib/types";
+import type { Board, List, Card, Member } from "@/lib/types";
+import Logo from "@/components/Logo";
+import ThemeToggle from "@/components/ThemeToggle";
+import Avatar from "@/components/Avatar";
+
+const ACCENTS = ["#5B57F2", "#0CA678", "#F06595", "#0EA5E9", "#F08C00", "#9775FA"];
+
+function tint(hex: string) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},.13)`;
+}
+
+function statusOf(name: string): "todo" | "doing" | "done" {
+  const n = name.toLowerCase();
+  if (n.includes("cours")) return "doing";
+  if (n.includes("termin")) return "done";
+  return "todo";
+}
 
 export default function HomePage() {
   const router = useRouter();
   const [boards, setBoards] = useState<Board[]>([]);
+  const [lists, setLists] = useState<List[]>([]);
+  const [cards, setCards] = useState<Card[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
 
   async function load() {
     try {
-      setBoards(await fetchBoards());
+      const [b, l, c, m] = await Promise.all([
+        fetchBoards(),
+        fetchAllLists(),
+        fetchAllCards(),
+        fetchMembers(),
+      ]);
+      setBoards(b);
+      setLists(l);
+      setCards(c);
+      setMembers(m);
     } finally {
       setLoading(false);
     }
@@ -24,23 +62,53 @@ export default function HomePage() {
   useEffect(() => {
     load();
     const ch = supabase
-      .channel("boards-home")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "boards" },
-        load
-      )
+      .channel("home")
+      .on("postgres_changes", { event: "*", schema: "public", table: "boards" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "lists" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "cards" }, load)
       .subscribe();
     return () => {
       supabase.removeChannel(ch);
     };
   }, []);
 
-  async function add(e: React.FormEvent) {
-    e.preventDefault();
+  const memById = useMemo(() => {
+    const m: Record<string, Member> = {};
+    for (const x of members) m[x.id] = x;
+    return m;
+  }, [members]);
+
+  // Stats par tableau
+  const stats = useMemo(() => {
+    const listsByBoard: Record<string, List[]> = {};
+    for (const l of lists) (listsByBoard[l.board_id] ??= []).push(l);
+    const statusByList: Record<string, "todo" | "doing" | "done"> = {};
+    for (const l of lists) statusByList[l.id] = statusOf(l.name);
+
+    return (boardId: string) => {
+      const bl = listsByBoard[boardId] ?? [];
+      const listIds = new Set(bl.map((l) => l.id));
+      const bc = cards.filter((c) => listIds.has(c.list_id));
+      const counts = { todo: 0, doing: 0, done: 0 };
+      const assignees = new Set<string>();
+      for (const c of bc) {
+        counts[statusByList[c.list_id] ?? "todo"]++;
+        c.assignee_ids.forEach((a) => assignees.add(a));
+      }
+      return {
+        lists: bl.length,
+        cards: bc.length,
+        counts,
+        members: [...assignees].map((id) => memById[id]).filter(Boolean),
+      };
+    };
+  }, [lists, cards, memById]);
+
+  async function add() {
     const n = name.trim();
     if (!n) return;
     setName("");
+    setCreating(false);
     const b = await createBoardWithDefaults(n);
     setBoards((prev) => [...prev, b]);
   }
@@ -58,82 +126,177 @@ export default function HomePage() {
   }
 
   return (
-    <main className="min-h-dvh bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 text-white">
-      <header className="flex items-center justify-between border-b border-white/10 bg-white/5 px-4 py-3 backdrop-blur-xl">
-        <h1 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-          <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-base shadow-lg">
-            🗂️
-          </span>
-          TeamBoard
-        </h1>
+    <main className="min-h-dvh bg-bg text-text">
+      <header className="flex items-center justify-between px-5 py-3.5">
+        <div className="flex items-center gap-2.5">
+          <Logo size={30} />
+          <span className="text-base font-bold tracking-[-0.02em]">TeamBoard</span>
+        </div>
         <div className="flex items-center gap-2">
           <Link
             href="/meetings"
-            className="rounded-xl bg-white/10 px-3 py-1.5 text-sm text-white/90 transition hover:bg-white/20"
+            aria-label="Réunions"
+            className="grid h-9 w-9 place-items-center rounded-xl border border-border bg-surface text-muted transition hover:text-text"
           >
-            📅 Réunions
+            <Calendar size={18} />
           </Link>
+          <ThemeToggle />
           <button
             onClick={logout}
-            className="rounded-xl bg-white/10 px-3 py-1.5 text-sm text-white/80 transition hover:bg-white/20 hover:text-white"
+            aria-label="Se déconnecter"
+            className="grid h-9 w-9 place-items-center rounded-xl text-white"
+            style={{ background: "linear-gradient(135deg,#6C5CE7,#5B57F2)" }}
           >
-            Déconnexion
+            <LogOut size={17} />
           </button>
         </div>
       </header>
 
-      <div className="mx-auto max-w-3xl p-4 sm:p-6">
-        <h2 className="mb-1 text-2xl font-bold tracking-tight">Tes tableaux</h2>
-        <p className="mb-5 text-sm text-white/50">
-          Organise le travail de l&apos;équipe, en temps réel.
+      <div className="px-5 pb-28">
+        <h1 className="text-[25px] font-bold tracking-[-0.025em]">Tes tableaux</h1>
+        <p className="mt-0.5 font-mono text-[11px] text-faint">
+          {boards.length} espace{boards.length > 1 ? "s" : ""} · sync en direct
         </p>
 
-        <form onSubmit={add} className="mb-6 flex gap-2">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Nom du nouveau tableau…"
-            className="flex-1 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-white placeholder:text-white/40 outline-none transition focus:border-sky-400/60 focus:bg-white/15"
-          />
-          <button
-            type="submit"
-            className="rounded-xl bg-gradient-to-br from-sky-500 to-indigo-500 px-5 py-2.5 font-medium text-white shadow-lg shadow-indigo-900/40 transition hover:brightness-110"
-          >
-            Créer
-          </button>
-        </form>
-
         {loading ? (
-          <p className="animate-pulse text-white/40">Chargement…</p>
+          <p className="mt-8 font-mono text-sm text-faint">Chargement…</p>
         ) : boards.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 p-10 text-center text-white/50">
-            Aucun tableau pour l&apos;instant.
-            <br />
-            Crée le premier ☝️
+          <div className="mt-8 rounded-[18px] border border-dashed border-border bg-surface p-10 text-center text-muted">
+            Aucun tableau. Crée le premier avec « Nouveau » ↘
           </div>
         ) : (
-          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {boards.map((b) => (
-              <li key={b.id} className="group relative">
-                <Link
-                  href={`/board/${b.id}`}
-                  className="block overflow-hidden rounded-2xl border border-white/10 bg-white/10 p-4 shadow-lg backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-white/15 hover:shadow-xl"
-                >
-                  <span className="mb-3 block h-1 w-10 rounded-full bg-gradient-to-r from-sky-400 to-indigo-400" />
-                  <span className="text-base font-semibold">{b.name}</span>
-                </Link>
-                <button
-                  onClick={() => remove(b.id)}
-                  className="absolute right-2.5 top-2.5 rounded-lg p-1 text-white/40 transition hover:bg-white/10 hover:text-red-400"
-                  aria-label="Supprimer"
-                >
-                  ✕
-                </button>
-              </li>
-            ))}
+          <ul className="mt-5 space-y-2.5">
+            {boards.map((b, i) => {
+              const s = stats(b.id);
+              const accent = ACCENTS[i % ACCENTS.length];
+              const total = s.counts.todo + s.counts.doing + s.counts.done || 1;
+              return (
+                <li key={b.id} className="anim-pop">
+                  <Link
+                    href={`/board/${b.id}`}
+                    className="block rounded-[18px] border border-border bg-surface p-3.5 shadow-[var(--card-shadow)]"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span
+                        className="grid h-10 w-10 shrink-0 place-items-center rounded-xl"
+                        style={{ background: tint(accent), color: accent }}
+                      >
+                        <Layers size={19} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[14.5px] font-semibold">
+                          {b.name}
+                        </p>
+                        <p className="font-mono text-[10.5px] text-faint">
+                          {s.lists} liste{s.lists > 1 ? "s" : ""} · {s.cards} carte
+                          {s.cards > 1 ? "s" : ""}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex">
+                          {s.members.slice(0, 4).map((m, idx) => (
+                            <span
+                              key={m.id}
+                              style={{ marginLeft: idx ? -7 : 0 }}
+                            >
+                              <Avatar member={m} size={23} />
+                            </span>
+                          ))}
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            remove(b.id);
+                          }}
+                          aria-label="Supprimer"
+                          className="text-faint transition hover:text-danger"
+                        >
+                          <Trash2 size={17} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Barre de progression */}
+                    <div className="mt-3 flex h-[5px] gap-[3px] overflow-hidden rounded-full">
+                      <span
+                        style={{ flex: s.counts.todo, background: "var(--track)" }}
+                        className="rounded-full"
+                      />
+                      <span
+                        style={{ flex: s.counts.doing, background: "#F0B429" }}
+                        className="rounded-full"
+                      />
+                      <span
+                        style={{ flex: s.counts.done, background: "#0CA678" }}
+                        className="rounded-full"
+                      />
+                      {total === 1 &&
+                        s.counts.todo + s.counts.doing + s.counts.done === 0 && (
+                          <span
+                            style={{ flex: 1, background: "var(--track)" }}
+                            className="rounded-full"
+                          />
+                        )}
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
+
+      {/* FAB */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 h-32 bg-gradient-to-t from-bg to-transparent" />
+      <button
+        onClick={() => setCreating(true)}
+        className="fixed bottom-6 right-5 flex h-12 items-center gap-1.5 rounded-2xl px-5 text-sm font-semibold text-white"
+        style={{ background: "var(--primary)", boxShadow: "var(--fab-shadow)" }}
+      >
+        <Plus size={18} />
+        Nouveau
+      </button>
+
+      {creating && (
+        <div
+          className="anim-fade fixed inset-0 z-50 flex items-end justify-center"
+          style={{ background: "var(--scrim)" }}
+          onClick={() => setCreating(false)}
+        >
+          <div
+            className="anim-sheet w-full max-w-md rounded-t-[26px] bg-surface p-5 pb-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-track" />
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-[19px] font-bold tracking-[-0.02em]">
+                Nouveau tableau
+              </h2>
+              <button
+                onClick={() => setCreating(false)}
+                className="grid h-8 w-8 place-items-center rounded-lg bg-inset text-muted"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && add()}
+              placeholder="Nom du tableau…"
+              className="w-full rounded-xl border border-border bg-inset px-4 py-3 text-text outline-none placeholder:text-faint"
+            />
+            <button
+              onClick={add}
+              className="mt-3 w-full rounded-xl py-3 font-semibold text-solid-text"
+              style={{ background: "var(--solid)" }}
+            >
+              Créer
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

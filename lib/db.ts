@@ -52,6 +52,22 @@ export async function deleteBoard(id: string) {
   if (error) throw error;
 }
 
+// Toutes les listes / cartes (pour les stats de l'accueil)
+export async function fetchAllLists(): Promise<List[]> {
+  const { data, error } = await supabase
+    .from("lists")
+    .select("*")
+    .order("position", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchAllCards(): Promise<Card[]> {
+  const { data, error } = await supabase.from("cards").select("*");
+  if (error) throw error;
+  return data ?? [];
+}
+
 // ---- Lists ----
 export async function fetchLists(boardId: string): Promise<List[]> {
   const { data, error } = await supabase
