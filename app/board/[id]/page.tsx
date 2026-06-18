@@ -115,6 +115,33 @@ function Sheet({
   );
 }
 
+function NoteSheet({
+  children,
+  onClose,
+}: {
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  const kb = useKeyboardInset();
+  return (
+    <div
+      className="anim-fade fixed inset-0 z-50 flex items-end justify-center"
+      style={{ background: "var(--scrim)", paddingBottom: kb }}
+      onClick={onClose}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label="Bloc-notes partagé"
+        className="anim-sheet flex h-full min-h-0 w-full max-w-xl flex-col overflow-hidden bg-surface sm:mb-4 sm:h-[min(84dvh,760px)] sm:rounded-[26px] sm:border sm:border-border sm:shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {children}
+      </section>
+    </div>
+  );
+}
+
 export default function BoardPage() {
   const params = useParams<{ id: string }>();
   const boardId = params.id;
@@ -744,27 +771,33 @@ export default function BoardPage() {
       )}
 
       {showNotes && (
-        <Sheet onClose={() => setShowNotes(false)}>
-          <div className="flex items-center gap-3">
+        <NoteSheet onClose={() => setShowNotes(false)}>
+          <div className="shrink-0 border-b border-border bg-surface px-4 pb-3 pt-2 sm:px-5 sm:pt-4">
+            <div className="mx-auto mb-2 h-1 w-9 rounded-full bg-track sm:hidden" />
+            <div className="flex items-center gap-3">
             <span
-              className="grid h-10 w-10 place-items-center rounded-xl"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-xl"
               style={{ background: "rgba(240,180,41,.14)", color: "#D49A00" }}
             >
-              <NotebookPen size={20} />
+              <NotebookPen size={18} />
             </span>
             <div className="min-w-0 flex-1">
-              <h2 className="text-[17px] font-bold">Bloc-notes partagé</h2>
-              <p className="truncate font-mono text-[10.5px] text-faint">
-                {boardName} · visible en direct
+              <h2 className="truncate text-base font-bold tracking-[-0.01em]">
+                Bloc-notes
+              </h2>
+              <p className="flex items-center gap-1.5 truncate text-xs text-muted">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#0CA678]" />
+                {boardName} · partagé en direct
               </p>
             </div>
             <button
               onClick={() => setShowNotes(false)}
-              className="grid h-8 w-8 place-items-center rounded-lg bg-inset text-muted"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-inset text-muted transition active:scale-95"
               aria-label="Fermer"
             >
-              <X size={17} />
+              <X size={19} />
             </button>
+            </div>
           </div>
 
           <CollaborativeNote
@@ -775,7 +808,7 @@ export default function BoardPage() {
             onNoteReady={setBoardNote}
             onTextChange={setNoteText}
           />
-        </Sheet>
+        </NoteSheet>
       )}
     </main>
   );

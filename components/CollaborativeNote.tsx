@@ -201,17 +201,17 @@ export default function CollaborativeNote({
   const otherNames = onlineNames.filter((name) => name !== member?.name);
 
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col bg-surface">
       <textarea
         autoFocus
         value={text}
         onChange={(event) => changeText(event.target.value)}
         placeholder="Idées, rappels, liens utiles…"
         rows={14}
-        className="mt-4 w-full resize-none rounded-2xl border border-border bg-inset p-4 text-[14px] leading-6 text-text outline-none transition focus:border-primary placeholder:text-faint"
+        className="min-h-0 flex-1 resize-none bg-surface px-5 py-5 text-base leading-7 text-text outline-none placeholder:text-faint sm:m-4 sm:w-[calc(100%-2rem)] sm:rounded-2xl sm:border sm:border-border sm:bg-inset sm:px-5 sm:py-4"
       />
 
-      <div className="mt-2 flex items-center justify-between gap-3 px-1 font-mono text-[10.5px] text-faint">
+      <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 border-t border-border bg-surface px-4 py-2.5 text-xs text-muted sm:px-5">
         <span className="flex min-w-0 items-center gap-1.5">
           <span
             className={`h-1.5 w-1.5 shrink-0 rounded-full ${
@@ -226,7 +226,7 @@ export default function CollaborativeNote({
                     : "#0CA678",
             }}
           />
-          <span className="truncate">
+          <span className="truncate font-medium">
             {saveState === "saving"
               ? "Synchronisation…"
               : saveState === "error"
@@ -236,8 +236,10 @@ export default function CollaborativeNote({
                   : "Synchronisé"}
           </span>
         </span>
-        <span className="shrink-0">{text.length} caractères</span>
+        <span className="shrink-0 font-mono text-[11px] text-faint">
+          {text.length} caractères
+        </span>
       </div>
-    </>
+    </div>
   );
 }
