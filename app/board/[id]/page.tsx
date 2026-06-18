@@ -50,6 +50,7 @@ import type { List, Card, Member } from "@/lib/types";
 import Avatar, { initials } from "@/components/Avatar";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useKeyboardInset } from "@/lib/useKeyboardInset";
+import { canAccessBoard, isCoreMember } from "@/lib/auth";
 
 const LABEL_COLORS = [
   "#E64980",
@@ -125,6 +126,7 @@ export default function BoardPage() {
   const [layout, setLayout] = useState<"horizontal" | "vertical">("vertical");
   const [showNotif, setShowNotif] = useState(false);
   const [pushOn, setPushOn] = useState(false);
+  const [myMemberId] = useState(() => getMyMemberId());
 
   useEffect(() => {
     isPushEnabled().then(setPushOn);
@@ -161,7 +163,6 @@ export default function BoardPage() {
     const ls = await fetchLists(boardId);
     setLists(ls);
     setCards(await fetchCards(ls.map((l) => l.id)));
-    setLoading(false);
   }
 
   async function loadMembers() {
@@ -169,9 +170,11 @@ export default function BoardPage() {
   }
 
   useEffect(() => {
-    load();
-    loadMembers();
-    fetchBoard(boardId).then((b) => b && setBoardName(b.name));
+    Promise.all([
+      load(),
+      loadMembers(),
+      fetchBoard(boardId).then((b) => b && setBoardName(b.name)),
+    ]).finally(() => setLoading(false));
     const ch = supabase
       .channel(`board-${boardId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "lists" }, load)
@@ -193,6 +196,14 @@ export default function BoardPage() {
     for (const x of members) m[x.id] = x;
     return m;
   }, [members]);
+
+  const me = myMemberId ? membersById[myMemberId] : undefined;
+  const isAdmin = isCoreMember(me?.name);
+  const canManage = canAccessBoard(me?.name, boardName);
+  const visibleCards = useMemo(
+    () => (canManage ? cards : []),
+    [canManage, cards]
+  );
 
   async function addMember(name: string): Promise<Member> {
     const color = MEMBER_COLORS[members.length % MEMBER_COLORS.length];
@@ -216,10 +227,10 @@ export default function BoardPage() {
   const cardsByList = useMemo(() => {
     const map: Record<string, Card[]> = {};
     for (const l of lists) map[l.id] = [];
-    for (const c of cards) (map[c.list_id] ??= []).push(c);
+    for (const c of visibleCards) (map[c.list_id] ??= []).push(c);
     for (const id in map) map[id].sort((a, b) => a.position - b.position);
     return map;
-  }, [lists, cards]);
+  }, [lists, visibleCards]);
 
   async function onDragEnd(result: DropResult) {
     const { source, destination, type, draggableId } = result;
@@ -229,6 +240,32 @@ export default function BoardPage() {
       source.index === destination.index
     )
       return;
+
+    if (!canManage) {
+      if (type === "list" || source.droppableId === destination.droppableId) return;
+      const moved = cards.find((card) => card.id === draggableId);
+      if (!moved) return;
+      const position =
+        Math.max(
+          -1,
+          ...cards
+            .filter((card) => card.list_id === destination.droppableId)
+            .map((card) => card.position)
+        ) + 1;
+      setCards((prev) =>
+        prev.map((card) =>
+          card.id === moved.id
+            ? { ...card, list_id: destination.droppableId, position }
+            : card
+        )
+      );
+      notifyIfDone(destination.droppableId, moved.title);
+      await updateCard(moved.id, {
+        list_id: destination.droppableId,
+        position,
+      });
+      return;
+    }
 
     if (type === "list") {
       const next = [...lists];
@@ -318,7 +355,14 @@ export default function BoardPage() {
 
   async function moveCardToList(card: Card, listId: string) {
     if (card.list_id === listId) return;
-    const pos = cardsByList[listId]?.length ?? 0;
+    const pos = canManage
+      ? cardsByList[listId]?.length ?? 0
+      : Math.max(
+          -1,
+          ...cards
+            .filter((item) => item.list_id === listId)
+            .map((item) => item.position)
+        ) + 1;
     setCards((prev) =>
       prev.map((c) =>
         c.id === card.id ? { ...c, list_id: listId, position: pos } : c
@@ -344,6 +388,26 @@ export default function BoardPage() {
     return (
       <main className="grid h-dvh place-items-center bg-bg text-faint">
         <div className="animate-pulse font-mono text-sm">Chargement…</div>
+      </main>
+    );
+  }
+
+  if (!canManage) {
+    return (
+      <main className="grid h-dvh place-items-center bg-bg px-5 text-center text-text">
+        <div>
+          <p className="text-lg font-bold">Tableau non accessible</p>
+          <p className="mt-1 text-sm text-muted">
+            Ce tableau n&apos;est pas attribué à ton pseudo.
+          </p>
+          <Link
+            href="/"
+            className="mt-4 inline-flex rounded-xl px-4 py-2 text-sm font-semibold text-white"
+            style={{ background: "var(--primary)" }}
+          >
+            Retour à mes tableaux
+          </Link>
+        </div>
       </main>
     );
   }
@@ -402,6 +466,7 @@ export default function BoardPage() {
             )}
           </button>
 
+          {isAdmin && (
           <button
             onClick={() => setShowMembers(true)}
             className="flex h-9 items-center gap-1.5 rounded-xl border border-border bg-surface px-2 text-muted transition hover:text-text"
@@ -415,6 +480,7 @@ export default function BoardPage() {
               ))}
             </div>
           </button>
+          )}
         </div>
       </header>
 
@@ -438,7 +504,12 @@ export default function BoardPage() {
                 const accent = columnAccent(list.name);
                 const count = cardsByList[list.id]?.length ?? 0;
                 return (
-                  <Draggable key={list.id} draggableId={list.id} index={index}>
+                  <Draggable
+                    key={list.id}
+                    draggableId={list.id}
+                    index={index}
+                    isDragDisabled={!canManage}
+                  >
                     {(prov) => (
                       <div
                         ref={prov.innerRef}
@@ -461,6 +532,7 @@ export default function BoardPage() {
                             renameList(list.id, name);
                           }}
                           onDelete={() => removeList(list.id)}
+                          canManage={canManage}
                         />
 
                         <Droppable droppableId={list.id} type="card">
@@ -549,14 +621,16 @@ export default function BoardPage() {
                           )}
                         </Droppable>
 
-                        <AddCard onAdd={() => addCardAndOpen(list.id)} />
+                        {canManage && (
+                          <AddCard onAdd={() => addCardAndOpen(list.id)} />
+                        )}
                       </div>
                     )}
                   </Draggable>
                 );
               })}
               {provided.placeholder}
-              <AddList onAdd={addList} vertical={isV} />
+              {canManage && <AddList onAdd={addList} vertical={isV} />}
             </div>
           )}
         </Droppable>
@@ -594,10 +668,11 @@ export default function BoardPage() {
             deleteCard(editing.id);
             closeCard();
           }}
+          canManage={canManage}
         />
       )}
 
-      {showMembers && (
+      {showMembers && isAdmin && (
         <MembersModal
           members={members}
           onClose={() => setShowMembers(false)}
@@ -637,6 +712,7 @@ function ListHeader({
   dragHandleProps,
   onRename,
   onDelete,
+  canManage,
 }: {
   list: List;
   accent: string;
@@ -644,6 +720,7 @@ function ListHeader({
   dragHandleProps: React.HTMLAttributes<HTMLDivElement> | null | undefined;
   onRename: (name: string) => void;
   onDelete: () => void;
+  canManage: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(list.name);
@@ -653,7 +730,7 @@ function ListHeader({
       {...dragHandleProps}
       className="flex items-center justify-between gap-2 px-1 py-2"
     >
-      {editing ? (
+      {editing && canManage ? (
         <input
           autoFocus
           value={name}
@@ -668,8 +745,8 @@ function ListHeader({
         />
       ) : (
         <div
-          onClick={() => setEditing(true)}
-          className="flex flex-1 cursor-text items-center gap-2"
+          onClick={() => canManage && setEditing(true)}
+          className={`flex flex-1 items-center gap-2 ${canManage ? "cursor-text" : ""}`}
         >
           <span
             style={{ background: accent }}
@@ -683,13 +760,13 @@ function ListHeader({
           </span>
         </div>
       )}
-      <button
+      {canManage && <button
         onClick={onDelete}
         className="shrink-0 text-faint transition hover:text-danger"
         aria-label="Supprimer la colonne"
       >
         <Trash2 size={15} />
-      </button>
+      </button>}
     </div>
   );
 }
@@ -775,6 +852,7 @@ function CardModal({
   onClose,
   onChange,
   onDelete,
+  canManage,
 }: {
   card: Card;
   isNew: boolean;
@@ -786,6 +864,7 @@ function CardModal({
   onClose: () => void;
   onChange: (fields: Partial<Card>) => void;
   onDelete: () => void;
+  canManage: boolean;
 }) {
   const [title, setTitle] = useState(card.title);
   const [description, setDescription] = useState(card.description);
@@ -883,6 +962,8 @@ function CardModal({
         ))}
       </div>
 
+      {canManage && (
+      <>
       {/* Assignés */}
       <SectionLabel>Assignés</SectionLabel>
       <div className="flex flex-wrap gap-2">
@@ -927,6 +1008,8 @@ function CardModal({
           <Plus size={18} />
         </button>
       </div>
+      </>
+      )}
 
       {/* Notes */}
       <SectionLabel>Notes</SectionLabel>
@@ -941,7 +1024,7 @@ function CardModal({
 
       {/* Pied */}
       <div className="mt-4 flex gap-2">
-        <button
+        {canManage && <button
           onClick={onDelete}
           className="grid h-11 w-11 shrink-0 place-items-center rounded-xl"
           style={{
@@ -952,7 +1035,7 @@ function CardModal({
           aria-label="Supprimer"
         >
           <Trash2 size={18} />
-        </button>
+        </button>}
         <button
           onClick={onClose}
           className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl font-semibold"

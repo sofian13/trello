@@ -18,6 +18,8 @@ import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
 import Avatar from "@/components/Avatar";
 import { useKeyboardInset } from "@/lib/useKeyboardInset";
+import { getMyMemberId } from "@/lib/push";
+import { canAccessBoard, isCoreMember } from "@/lib/auth";
 
 const ACCENTS = ["#5B57F2", "#0CA678", "#F06595", "#0EA5E9", "#F08C00", "#9775FA"];
 
@@ -42,6 +44,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
+  const [myMemberId] = useState(() => getMyMemberId());
   const kb = useKeyboardInset();
 
   async function load() {
@@ -79,6 +82,13 @@ export default function HomePage() {
     for (const x of members) m[x.id] = x;
     return m;
   }, [members]);
+
+  const me = myMemberId ? memById[myMemberId] : undefined;
+  const canManage = isCoreMember(me?.name);
+  const visibleBoards = useMemo(
+    () => boards.filter((board) => canAccessBoard(me?.name, board.name)),
+    [boards, me?.name]
+  );
 
   // Stats par tableau
   const stats = useMemo(() => {
@@ -123,6 +133,9 @@ export default function HomePage() {
 
   async function logout() {
     await fetch("/api/logout", { method: "POST" });
+    try {
+      localStorage.removeItem("tb_me");
+    } catch {}
     router.push("/login");
     router.refresh();
   }
@@ -157,18 +170,18 @@ export default function HomePage() {
       <div className="px-5 pb-28">
         <h1 className="text-[25px] font-bold tracking-[-0.025em]">Tes tableaux</h1>
         <p className="mt-0.5 font-mono text-[11px] text-faint">
-          {boards.length} espace{boards.length > 1 ? "s" : ""} · sync en direct
+          {visibleBoards.length} espace{visibleBoards.length > 1 ? "s" : ""} · sync en direct
         </p>
 
         {loading ? (
           <p className="mt-8 font-mono text-sm text-faint">Chargement…</p>
-        ) : boards.length === 0 ? (
+        ) : visibleBoards.length === 0 ? (
           <div className="mt-8 rounded-[18px] border border-dashed border-border bg-surface p-10 text-center text-muted">
-            Aucun tableau. Crée le premier avec « Nouveau » ↘
+            Aucun tableau ne t&apos;est attribué pour le moment.
           </div>
         ) : (
           <ul className="mt-5 space-y-2.5">
-            {boards.map((b, i) => {
+            {visibleBoards.map((b, i) => {
               const s = stats(b.id);
               const accent = ACCENTS[i % ACCENTS.length];
               const total = s.counts.todo + s.counts.doing + s.counts.done || 1;
@@ -205,7 +218,8 @@ export default function HomePage() {
                             </span>
                           ))}
                         </div>
-                        <button
+                        {canManage && (
+                          <button
                           onClick={(e) => {
                             e.preventDefault();
                             remove(b.id);
@@ -214,7 +228,8 @@ export default function HomePage() {
                           className="text-faint transition hover:text-danger"
                         >
                           <Trash2 size={17} />
-                        </button>
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -248,6 +263,8 @@ export default function HomePage() {
         )}
       </div>
 
+      {canManage && (
+      <>
       {/* FAB */}
       <div className="pointer-events-none fixed inset-x-0 bottom-0 h-32 bg-gradient-to-t from-bg to-transparent" />
       <button
@@ -298,6 +315,8 @@ export default function HomePage() {
             </button>
           </div>
         </div>
+      )}
+      </>
       )}
     </main>
   );

@@ -1,12 +1,24 @@
-export const AUTH_COOKIE = "tb_auth";
-const SALT = "teamboard-v1";
+export const MEMBER_COOKIE = "tb_member";
 
-// Jeton déposé en cookie quand le mot de passe est bon. Dérivé du mot de passe,
-// donc le cookie ne contient jamais le mot de passe en clair. Compatible Edge.
-export async function authToken(password: string): Promise<string> {
-  const data = new TextEncoder().encode(`${SALT}:${password}`);
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  return [...new Uint8Array(digest)]
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+const CORE_MEMBER_NAMES = new Set(["soso", "pablo", "moha"]);
+const SORA_CARD_MEMBER_NAMES = new Set(["soso", "rayan"]);
+
+export function normalizeMemberName(name: string): string {
+  return name.trim().toLocaleLowerCase("fr");
+}
+
+export function isCoreMember(name: string | null | undefined): boolean {
+  return !!name && CORE_MEMBER_NAMES.has(normalizeMemberName(name));
+}
+
+export function canAccessBoard(
+  memberName: string | null | undefined,
+  boardName: string
+): boolean {
+  if (!memberName) return false;
+  const member = normalizeMemberName(memberName);
+  const board = boardName.trim().toLocaleLowerCase("fr");
+
+  if (board === "sora card") return SORA_CARD_MEMBER_NAMES.has(member);
+  return CORE_MEMBER_NAMES.has(member);
 }
