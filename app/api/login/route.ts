@@ -1,18 +1,15 @@
 import { NextResponse } from "next/server";
-import { MEMBER_COOKIE } from "@/lib/auth";
+import { MEMBER_COOKIE, normalizeMemberName } from "@/lib/auth";
 import { fetchMembers } from "@/lib/db";
 
-export async function GET() {
-  const members = await fetchMembers();
-  return NextResponse.json(
-    members.map(({ id, name, color }) => ({ id, name, color }))
-  );
-}
-
 export async function POST(req: Request) {
-  const { memberId } = await req.json().catch(() => ({ memberId: "" }));
+  const { pseudo } = await req.json().catch(() => ({ pseudo: "" }));
+  const normalizedPseudo =
+    typeof pseudo === "string" ? normalizeMemberName(pseudo) : "";
   const members = await fetchMembers();
-  const member = members.find((item) => item.id === memberId);
+  const member = members.find(
+    (item) => normalizeMemberName(item.name) === normalizedPseudo
+  );
 
   if (!member) {
     return NextResponse.json({ ok: false }, { status: 401 });

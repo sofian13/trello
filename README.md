@@ -23,7 +23,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...   # clé "anon public" (Project Settings > 
 ```
 npm run dev
 ```
-Ouvre http://localhost:3000 → choisis ton pseudo.
+Ouvre http://localhost:3000 → entre ton pseudo.
 
 ## Déploiement Vercel
 - Pousse le repo sur GitHub, importe-le dans Vercel.
