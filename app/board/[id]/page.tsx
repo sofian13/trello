@@ -510,7 +510,7 @@ export default function BoardPage() {
           <button
             onClick={() => setShowNotes(true)}
             aria-label="Ouvrir le bloc-notes"
-            className="relative grid h-9 w-9 place-items-center rounded-xl border border-border bg-surface text-muted transition hover:text-text"
+            className="relative hidden h-9 w-9 place-items-center rounded-xl border border-border bg-surface text-muted transition hover:text-text sm:grid"
           >
             <NotebookPen size={18} />
             {noteText.trim() && (
@@ -565,8 +565,8 @@ export default function BoardPage() {
               {...provided.droppableProps}
               className={
                 isV
-                  ? "mx-auto flex w-full max-w-2xl flex-1 flex-col gap-3 overflow-y-auto px-4 pb-6"
-                  : "flex flex-1 items-start gap-3 overflow-x-auto px-4 pb-6"
+                  ? "mx-auto flex w-full max-w-2xl flex-1 flex-col gap-3 overflow-y-auto px-4 pb-24 sm:pb-6"
+                  : "flex flex-1 items-start gap-3 overflow-x-auto px-4 pb-24 sm:pb-6"
               }
             >
               {lists.map((list, index) => {
@@ -704,6 +704,20 @@ export default function BoardPage() {
           )}
         </Droppable>
       </DragDropContext>
+
+      {!showNotes && (
+        <button
+          onClick={() => setShowNotes(true)}
+          className="fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-30 flex min-h-12 items-center gap-2 rounded-2xl px-5 text-sm font-semibold text-white shadow-[var(--fab-shadow)] sm:hidden"
+          style={{ background: "var(--primary)" }}
+        >
+          <NotebookPen size={19} />
+          Bloc-notes
+          {noteText.trim() && (
+            <span className="h-2 w-2 rounded-full bg-[#F0B429]" />
+          )}
+        </button>
+      )}
 
       {editing && (
         <CardModal
