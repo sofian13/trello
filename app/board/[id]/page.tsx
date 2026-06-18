@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -39,7 +39,6 @@ import {
   createMember,
   deleteMember,
   fetchBoardNote,
-  createBoardNote,
 } from "@/lib/db";
 import {
   enablePush,
@@ -54,6 +53,8 @@ import Avatar, { initials } from "@/components/Avatar";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useKeyboardInset } from "@/lib/useKeyboardInset";
 import { canAccessBoard, isCoreMember } from "@/lib/auth";
+import { noteTextFromStorage } from "@/lib/yjs-note";
+import CollaborativeNote from "@/components/CollaborativeNote";
 
 const LABEL_COLORS = [
   "#E64980",
@@ -132,13 +133,7 @@ export default function BoardPage() {
   const [showNotes, setShowNotes] = useState(false);
   const [boardNote, setBoardNote] = useState<Card | null>(null);
   const [noteText, setNoteText] = useState("");
-  const [noteState, setNoteState] = useState<"saved" | "saving" | "error">(
-    "saved"
-  );
   const [myMemberId] = useState(() => getMyMemberId());
-  const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const noteCreate = useRef<Promise<Card> | null>(null);
-  const noteDirty = useRef(false);
 
   useEffect(() => {
     isPushEnabled().then(setPushOn);
@@ -181,7 +176,9 @@ export default function BoardPage() {
     ]);
     setCards(nextCards);
     setBoardNote(nextNote);
-    if (!noteDirty.current) setNoteText(nextNote?.description ?? "");
+    if (!showNotes) {
+      setNoteText(noteTextFromStorage(nextNote?.description ?? ""));
+    }
   }
 
   async function loadMembers() {
@@ -209,12 +206,6 @@ export default function BoardPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boardId]);
-
-  useEffect(() => {
-    return () => {
-      if (noteTimer.current) clearTimeout(noteTimer.current);
-    };
-  }, []);
 
   const membersById = useMemo(() => {
     const m: Record<string, Member> = {};
@@ -412,29 +403,6 @@ export default function BoardPage() {
     setLists((prev) => prev.filter((l) => l.id !== id));
     setCards((prev) => prev.filter((c) => c.list_id !== id));
     await deleteList(id);
-  }
-
-  function changeNote(value: string) {
-    setNoteText(value);
-    setNoteState("saving");
-    noteDirty.current = true;
-    if (noteTimer.current) clearTimeout(noteTimer.current);
-    noteTimer.current = setTimeout(async () => {
-      try {
-        let note = boardNote;
-        if (!note && lists[0]) {
-          noteCreate.current ??= createBoardNote(lists[0].id);
-          note = await noteCreate.current;
-          setBoardNote(note);
-        }
-        if (note) await updateCard(note.id, { description: value });
-        setNoteState("saved");
-      } catch {
-        setNoteState("error");
-      } finally {
-        noteDirty.current = false;
-      }
-    }, 350);
   }
 
   const isV = layout === "vertical";
@@ -799,38 +767,14 @@ export default function BoardPage() {
             </button>
           </div>
 
-          <textarea
-            autoFocus
-            value={noteText}
-            onChange={(event) => changeNote(event.target.value)}
-            placeholder="Idées, rappels, liens utiles…"
-            rows={14}
-            className="mt-4 w-full resize-none rounded-2xl border border-border bg-inset p-4 text-[14px] leading-6 text-text outline-none transition focus:border-primary placeholder:text-faint"
+          <CollaborativeNote
+            boardId={boardId}
+            initialNote={boardNote}
+            listId={lists[0]?.id}
+            member={me}
+            onNoteReady={setBoardNote}
+            onTextChange={setNoteText}
           />
-
-          <div className="mt-2 flex items-center justify-between px-1 font-mono text-[10.5px] text-faint">
-            <span className="flex items-center gap-1.5">
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  noteState === "saving" ? "animate-pulse" : ""
-                }`}
-                style={{
-                  background:
-                    noteState === "saving"
-                      ? "#F0B429"
-                      : noteState === "error"
-                        ? "#E64980"
-                        : "#0CA678",
-                }}
-              />
-              {noteState === "saving"
-                ? "Enregistrement…"
-                : noteState === "error"
-                  ? "Échec de sauvegarde"
-                  : "Synchronisé"}
-            </span>
-            <span>{noteText.length} caractères</span>
-          </div>
         </Sheet>
       )}
     </main>

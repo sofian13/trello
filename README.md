@@ -5,6 +5,7 @@ Un Trello simple, en PWA, pour toi et tes collègues. Tableaux → colonnes → 
 ## Stack
 - Next.js 16 (App Router) + Tailwind v4
 - Supabase (Postgres + Realtime)
+- Yjs (édition collaborative des blocs-notes)
 - @hello-pangea/dnd (drag & drop)
 - PWA installable (manifest + service worker)
 
