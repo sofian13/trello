@@ -12,7 +12,12 @@ export type List = {
   created_at: string;
 };
 
-export type CardStatus = "none" | "todo" | "in_progress" | "done";
+export type CardStatus =
+  | "none"
+  | "todo"
+  | "in_progress"
+  | "done"
+  | "note";
 
 export type Card = {
   id: string;

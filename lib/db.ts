@@ -26,9 +26,10 @@ export const DEFAULT_COLUMNS = ["À faire", "En cours", "Terminé"];
 
 export async function createBoardWithDefaults(name: string): Promise<Board> {
   const board = await createBoard(name);
-  await Promise.all(
+  const lists = await Promise.all(
     DEFAULT_COLUMNS.map((n, i) => createList(board.id, n, i))
   );
+  await createBoardNote(lists[0].id);
   return board;
 }
 
@@ -63,7 +64,10 @@ export async function fetchAllLists(): Promise<List[]> {
 }
 
 export async function fetchAllCards(): Promise<Card[]> {
-  const { data, error } = await supabase.from("cards").select("*");
+  const { data, error } = await supabase
+    .from("cards")
+    .select("*")
+    .neq("status", "note");
   if (error) throw error;
   return data ?? [];
 }
@@ -111,6 +115,7 @@ export async function fetchCards(boardListIds: string[]): Promise<Card[]> {
     .from("cards")
     .select("*")
     .in("list_id", boardListIds)
+    .neq("status", "note")
     .order("position", { ascending: true });
   if (error) throw error;
   return data ?? [];
@@ -120,6 +125,36 @@ export async function createCard(listId: string, title: string, position: number
   const { data, error } = await supabase
     .from("cards")
     .insert({ list_id: listId, title, position })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Card;
+}
+
+export async function fetchBoardNote(listIds: string[]): Promise<Card | null> {
+  if (listIds.length === 0) return null;
+  const { data, error } = await supabase
+    .from("cards")
+    .select("*")
+    .in("list_id", listIds)
+    .eq("status", "note")
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function createBoardNote(listId: string): Promise<Card> {
+  const { data, error } = await supabase
+    .from("cards")
+    .insert({
+      list_id: listId,
+      title: "__TEAMBOARD_NOTES__",
+      description: "",
+      position: -1,
+      status: "note",
+      assignee_ids: [],
+    })
     .select()
     .single();
   if (error) throw error;

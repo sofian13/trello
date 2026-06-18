@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -21,6 +21,7 @@ import {
   Columns3,
   Rows3,
   AlertTriangle,
+  NotebookPen,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
@@ -37,6 +38,8 @@ import {
   fetchMembers,
   createMember,
   deleteMember,
+  fetchBoardNote,
+  createBoardNote,
 } from "@/lib/db";
 import {
   enablePush,
@@ -126,7 +129,16 @@ export default function BoardPage() {
   const [layout, setLayout] = useState<"horizontal" | "vertical">("vertical");
   const [showNotif, setShowNotif] = useState(false);
   const [pushOn, setPushOn] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
+  const [boardNote, setBoardNote] = useState<Card | null>(null);
+  const [noteText, setNoteText] = useState("");
+  const [noteState, setNoteState] = useState<"saved" | "saving" | "error">(
+    "saved"
+  );
   const [myMemberId] = useState(() => getMyMemberId());
+  const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noteCreate = useRef<Promise<Card> | null>(null);
+  const noteDirty = useRef(false);
 
   useEffect(() => {
     isPushEnabled().then(setPushOn);
@@ -162,7 +174,14 @@ export default function BoardPage() {
   async function load() {
     const ls = await fetchLists(boardId);
     setLists(ls);
-    setCards(await fetchCards(ls.map((l) => l.id)));
+    const listIds = ls.map((l) => l.id);
+    const [nextCards, nextNote] = await Promise.all([
+      fetchCards(listIds),
+      fetchBoardNote(listIds),
+    ]);
+    setCards(nextCards);
+    setBoardNote(nextNote);
+    if (!noteDirty.current) setNoteText(nextNote?.description ?? "");
   }
 
   async function loadMembers() {
@@ -190,6 +209,12 @@ export default function BoardPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boardId]);
+
+  useEffect(() => {
+    return () => {
+      if (noteTimer.current) clearTimeout(noteTimer.current);
+    };
+  }, []);
 
   const membersById = useMemo(() => {
     const m: Record<string, Member> = {};
@@ -377,9 +402,39 @@ export default function BoardPage() {
 
   async function removeList(id: string) {
     if (!confirm("Supprimer cette colonne et ses cartes ?")) return;
+    if (boardNote?.list_id === id) {
+      const fallback = lists.find((list) => list.id !== id);
+      if (fallback) {
+        await updateCard(boardNote.id, { list_id: fallback.id });
+        setBoardNote({ ...boardNote, list_id: fallback.id });
+      }
+    }
     setLists((prev) => prev.filter((l) => l.id !== id));
     setCards((prev) => prev.filter((c) => c.list_id !== id));
     await deleteList(id);
+  }
+
+  function changeNote(value: string) {
+    setNoteText(value);
+    setNoteState("saving");
+    noteDirty.current = true;
+    if (noteTimer.current) clearTimeout(noteTimer.current);
+    noteTimer.current = setTimeout(async () => {
+      try {
+        let note = boardNote;
+        if (!note && lists[0]) {
+          noteCreate.current ??= createBoardNote(lists[0].id);
+          note = await noteCreate.current;
+          setBoardNote(note);
+        }
+        if (note) await updateCard(note.id, { description: value });
+        setNoteState("saved");
+      } catch {
+        setNoteState("error");
+      } finally {
+        noteDirty.current = false;
+      }
+    }, 350);
   }
 
   const isV = layout === "vertical";
@@ -451,6 +506,20 @@ export default function BoardPage() {
           </div>
 
           <ThemeToggle />
+
+          <button
+            onClick={() => setShowNotes(true)}
+            aria-label="Ouvrir le bloc-notes"
+            className="relative grid h-9 w-9 place-items-center rounded-xl border border-border bg-surface text-muted transition hover:text-text"
+          >
+            <NotebookPen size={18} />
+            {noteText.trim() && (
+              <span
+                className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full"
+                style={{ background: "#F0B429" }}
+              />
+            )}
+          </button>
 
           <button
             onClick={() => setShowNotif(true)}
@@ -690,6 +759,65 @@ export default function BoardPage() {
           onEnabled={() => setPushOn(true)}
           onDisabled={() => setPushOn(false)}
         />
+      )}
+
+      {showNotes && (
+        <Sheet onClose={() => setShowNotes(false)}>
+          <div className="flex items-center gap-3">
+            <span
+              className="grid h-10 w-10 place-items-center rounded-xl"
+              style={{ background: "rgba(240,180,41,.14)", color: "#D49A00" }}
+            >
+              <NotebookPen size={20} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-[17px] font-bold">Bloc-notes partagé</h2>
+              <p className="truncate font-mono text-[10.5px] text-faint">
+                {boardName} · visible en direct
+              </p>
+            </div>
+            <button
+              onClick={() => setShowNotes(false)}
+              className="grid h-8 w-8 place-items-center rounded-lg bg-inset text-muted"
+              aria-label="Fermer"
+            >
+              <X size={17} />
+            </button>
+          </div>
+
+          <textarea
+            autoFocus
+            value={noteText}
+            onChange={(event) => changeNote(event.target.value)}
+            placeholder="Idées, rappels, liens utiles…"
+            rows={14}
+            className="mt-4 w-full resize-none rounded-2xl border border-border bg-inset p-4 text-[14px] leading-6 text-text outline-none transition focus:border-primary placeholder:text-faint"
+          />
+
+          <div className="mt-2 flex items-center justify-between px-1 font-mono text-[10.5px] text-faint">
+            <span className="flex items-center gap-1.5">
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  noteState === "saving" ? "animate-pulse" : ""
+                }`}
+                style={{
+                  background:
+                    noteState === "saving"
+                      ? "#F0B429"
+                      : noteState === "error"
+                        ? "#E64980"
+                        : "#0CA678",
+                }}
+              />
+              {noteState === "saving"
+                ? "Enregistrement…"
+                : noteState === "error"
+                  ? "Échec de sauvegarde"
+                  : "Synchronisé"}
+            </span>
+            <span>{noteText.length} caractères</span>
+          </div>
+        </Sheet>
       )}
     </main>
   );
